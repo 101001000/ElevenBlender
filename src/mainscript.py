@@ -1,53 +1,267 @@
 import bpy
+import gpu
 import socket
 import array
-import gpu
 import json
 import subprocess
 import struct
 import sys
 import os
+import bgl
 import math
 import time
+import ctypes
 import numpy as np
+from datetime import datetime
 from gpu_extras.presets import draw_texture_2d
 
 
-
+ELEVEN_PATH = "C:\\Users\\Kike\\Desktop\\TFM\\repos\\ElevenRender\\ElevenRender.exe"
 TCP_MESSAGE_MAXSIZE = 1024
+TARGET_SAMPLES = 50
+
+
+def export_scene(scene, path):
+    
+    scene_object = dict()
+
+    #Camera setup:
+    b_cam_loc = bpy.data.objects['Camera'].location
+    b_cam_rot = bpy.data.objects['Camera'].rotation_euler 
+
+    scene_object['camera'] = dict()
+
+    scene_object['camera']['xRes'] = scene.render.resolution_x
+    scene_object['camera']['yRes'] = scene.render.resolution_y
+
+    scene_object['camera']['position'] = {'x':b_cam_loc.x,'y':b_cam_loc.z,'z':b_cam_loc.y}
+    scene_object['camera']['rotation'] = {'x': 90 - b_cam_rot.x / (math.pi/180), 'y':-b_cam_rot.z / (math.pi/180), 'z': -b_cam_rot.y / (math.pi/180)}
+
+    scene_object['camera']['focalLength'] = bpy.data.cameras[0].lens/1000
+    scene_object['camera']['focusDistance'] = bpy.data.cameras[0].dof.focus_distance
+    scene_object['camera']['aperture'] = bpy.data.cameras[0].dof.aperture_fstop
+    scene_object['camera']['bokeh'] = bpy.data.cameras[0].dof.use_dof
+
+
+    #Hdri setup:
+
+    scene_object['hdri'] = dict()
+
+    if bpy.context.scene.world.node_tree.nodes.find('Environment Texture') != -1:
+        
+        tex = bpy.context.scene.world.node_tree.nodes['Environment Texture'].image
+        full_path = bpy.path.abspath(tex.filepath, library=tex.library)
+        norm_path = os.path.normpath(full_path)
+        scene_object['hdri']['name'] = norm_path
+        
+    else:        
+        b_env_color = bpy.context.scene.world.node_tree.nodes['Background'].inputs[0].default_value
+        scene_object['hdri']['color'] = {'r':b_env_color[0], 'g':b_env_color[1], 'b':b_env_color[2]}        
+    
+    bpy.ops.export_scene.obj(filepath=path + "\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')
+    with open(path + "\\scene.json", 'w') as fs:
+            fs.write(json.dumps(scene_object))
+
+def get_render_info_msg():
+              
+    msg = dict()
+    msg["type"] = "command"
+    msg["msg"] = '--get_render_info'
+    return msg
 
 def write_message(msg, sock):
-    
+                           
+    if "additional_data" in msg:
+        add_data = msg["additional_data"]["data"]
+        msg["additional_data"].pop("data")
+            
     message_str = json.dumps(msg, indent = 4) 
-    message_bytes = message_str.encode('utf-8')
+    message_bytes = message_str.encode('utf-8') + b'\00'
     
     sock.sendall(message_bytes)
     
-    if msg["data_size"] > 0:
-        sock.sendall(bytes(msg["data"]))
+    if "additional_data" in msg:
+        
+        log("Sending additional bytes")
+        sock.sendall(add_data)
 
+    log("Message written: " + str(message_str))
 
 def read_message(sock):
-            
+                
     message_bytes = sock.recv(TCP_MESSAGE_MAXSIZE)
+    
     message_str = message_bytes.decode("utf-8")
+    
     message_json = json.loads(message_str)
     
-    if message_json["data_size"] > 0:
+    if "additional_data" in message_json:
         
-        message_json["data"] = bytearray()
+        message_json["additional_data"]["data"] = bytearray()
         amount_received = 0
                 
-        while amount_received < message_json["data_size"]:
+        while amount_received < message_json["additional_data"]["data_size"]:
             data = sock.recv(8096)
             amount_received += len(data)
-            message_json["data"] += data
+            message_json["additional_data"]["data"] += data
+            
+    
+    print("Message read ", message_str)
     
     return message_json    
-    
-    
 
-def sceneTCP(scene_path):
+def extractTextureNodesFromMat(mat):
+    
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    
+    texs = []
+    
+    for input in bsdf.inputs:
+        if input.links:
+            tex_node = input.links[0].from_node
+            if tex_node.type =='TEX_IMAGE':
+                texs.append(tex_node)
+            if tex_node.type == 'NORMAL_MAP':
+                try:
+                    texs.append(tex_node.inputs['Color'].links[0].from_node)
+                except:
+                    pass
+    
+    return texs
+
+def sendHDRI(sock, json_tex):
+    arr = np.array(json_tex.pop("data"), dtype=np.single)
+    arr = np.delete(arr, np.arange(3, arr.size, 4))
+
+    byte_data = arr.tobytes()   
+    
+             
+    tex_load_msg = dict()
+    tex_load_msg["type"] = "command"
+    tex_load_msg["msg"] = '--load_hdri ' + json.dumps(json_tex, separators=(',', ':'))
+    tex_load_msg["additional_data"] = dict()
+    tex_load_msg["additional_data"]["data_type"] = "float"
+    tex_load_msg["additional_data"]["data"] = byte_data
+    tex_load_msg["additional_data"]["data_size"] = len(byte_data)
+
+
+def sendTexture(sock, json_tex):
+        
+    image = json_tex.pop("data")    
+    arr = np.empty((image.size[1] * image.size[0] * 4), dtype=np.single)
+    image.pixels.foreach_get(arr)
+    
+    arr = np.delete(arr, np.arange(3, arr.size, 4))
+    byte_data = arr.tobytes()   
+             
+    tex_load_msg = dict()
+    tex_load_msg["type"] = "command"
+    tex_load_msg["msg"] = '--load_texture ' + json.dumps(json_tex, separators=(',', ':'))
+    tex_load_msg["additional_data"] = dict()
+    tex_load_msg["additional_data"]["data_type"] = "float"
+    tex_load_msg["additional_data"]["data"] = byte_data
+    tex_load_msg["additional_data"]["data_size"] = len(byte_data)
+      
+    write_message(tex_load_msg, sock)
+
+def sendMaterial(sock, json_mat):
+    
+    byte_data = bytearray(json.dumps(json_mat, indent = 4).encode()) + b'\00'
+            
+    mat_load_msg = dict()
+    mat_load_msg["type"] = "command"
+    mat_load_msg["msg"] = "--load_material" 
+    mat_load_msg["additional_data"] = dict()
+    mat_load_msg["additional_data"]["data_type"] = "json"
+    mat_load_msg["additional_data"]["data"] = byte_data 
+    mat_load_msg["additional_data"]["data_size"] = len(byte_data)
+    
+    write_message(mat_load_msg, sock)
+
+def convertTextureNode(tex_node):
+    
+    log("Converting texture...")
+    
+    tex_json = dict()
+    tex_json["name"] = tex_node.image.name
+    tex_json["width"] = int(tex_node.image.size[0])
+    tex_json["height"] = int(tex_node.image.size[1]) 
+    tex_json["data"] = tex_node.image
+    tex_json["color_space"] = tex_node.image.colorspace_settings.name
+    
+    log("Converted texture")
+    
+    return tex_json  
+ 
+def compatible(mat):
+    try:
+        next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+        return True
+    except:
+        return False
+        
+        
+ 
+def convertMaterial(mat):
+    
+    principled = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    
+    p_base_color = principled.inputs['Base Color'].default_value
+    p_metalness = principled.inputs['Metallic'].default_value
+    p_roughness = principled.inputs['Roughness'].default_value
+    p_specular = principled.inputs['Specular'].default_value
+    p_opacity = principled.inputs['Alpha'].default_value
+        
+    p_emission_color = principled.inputs['Emission'].default_value
+    p_emission_strength = principled.inputs['Emission Strength'].default_value
+        
+    mat_json = dict()
+    mat_json["name"] = mat.name
+    mat_json["albedo"] = {"r":p_base_color[0], "g":p_base_color[1], "b":p_base_color[2]}
+    mat_json["metalness"] = p_metalness
+    mat_json["roughness"] = p_roughness
+    mat_json["specular"] = p_specular
+    mat_json["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
+    
+    try:
+        mat_json["albedo_map"] = principled.inputs['Base Color'].links[0].from_node.image.name
+    except:
+        pass 
+    
+    try:
+        mat_json["roughness_map"] = principled.inputs['Roughness'].links[0].from_node.image.name
+    except:
+        pass
+    
+    try:
+        mat_json["metallic_map"] = principled.inputs['Metallic'].links[0].from_node.image.name
+    except:
+        pass
+    
+    try:
+        mat_json["emission_map"] = principled.inputs['Emission'].links[0].from_node.image.name
+    except:
+        pass
+    
+    try:
+        mat_json["normal_map"] = principled.inputs['Normal'].links[0].from_node.inputs['Color'].links[0].from_node.image.name
+    except:
+        pass  
+    
+    try:
+        mat_json["opacity_map"] = principled.inputs['Alpha'].links[0].from_node.image.name
+    except:
+        pass   
+
+    
+    return mat_json
+
+def log(str):
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print(current_time, str)
+    
+def sceneTCP(scene_path, render_instance):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -61,47 +275,88 @@ def sceneTCP(scene_path):
     try:
         
         scene_load_msg = dict()
-        
         scene_load_msg["type"] = "command"
         scene_load_msg["msg"] = "--load_obj " + scene_path      
         
-        write_message(scene_load_msg, sock)        
-
-    finally:
-        print('closing socket')
-        sock.close()
-
-
-def tcpTest():
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    server_address = ('127.0.0.1', 5557)
-    print('connecting to {} port {}'.format(*server_address))
-    sock.connect(server_address)
-
-    response_data = []
-    response_bytes = bytearray()
-
-
-    try:
-      
-        amount_received = 0
-        amount_expected = 1920*1080*4*4
+        write_message(scene_load_msg, sock)
+        ack_message = read_message(sock) 
+        
+        if ack_message["type"] == "status" and ack_message["msg"] == "ok":
+            print("Scene loaded")
+            
+        texture_queue = []
+            
+        for mat in bpy.data.materials:
+            
+            if compatible(mat):
+            
+                print("parsing ", mat.name)
                 
-        while amount_received < amount_expected:
-            data = sock.recv(8096)
-            amount_received += len(data)
-            response_bytes += data
+                texture_queue.append(extractTextureNodesFromMat(mat))
+                
+                sendMaterial(sock, convertMaterial(mat))
+                    
+                ack_mat_message = read_message(sock) 
+            
+                if ack_mat_message["type"] == "status" and ack_mat_message["msg"] == "ok":
+                    print(mat.name, " loaded")
+            
+            
+        texture_queue = [item for sublist in texture_queue for item in sublist]
+        texture_queue_non_dup = []
+        [texture_queue_non_dup.append(x) for x in texture_queue if x not in texture_queue_non_dup]
+        
+        for tex_node in texture_queue_non_dup:
+            log("Sending texture " + tex_node.name)
+            sendTexture(sock, convertTextureNode(tex_node))
+            log("Texture sent, waiting for ack")
+            ack_mat_message = read_message(sock) 
+            if ack_mat_message["type"] == "status" and ack_mat_message["msg"] == "ok":
+                print(tex_node.name, " loaded")
+            
+        
+                    
+        render_start_msg = dict()
+        render_start_msg["type"] = "command"
+        render_start_msg["msg"] = "--start"       
+        
+        write_message(render_start_msg, sock)    
+        
+        time.sleep(5) 
+        
+        samples = 0
+        
+        while samples < TARGET_SAMPLES:
+            print("getting samples...")
+            write_message(get_render_info_msg(), sock)
+            info_msg = read_message(sock)
+            if info_msg["type"] == "render_info":
+                samples = json.loads(info_msg["msg"])["samples"]
+                render_instance.update_progress(samples / TARGET_SAMPLES) 
+                print(samples)
+            else:
+                break
+            time.sleep(0.5) 
+            
+        
+        get_pass_msg = dict()
+        get_pass_msg["type"] = "command"
+        get_pass_msg["msg"] = "--get_pass beauty" 
+    
+        write_message(get_pass_msg, sock)
+        pass_message = read_message(sock) 
+        
+        if pass_message["type"] == "buffer":
+            print("Scene loaded")    
 
     finally:
         print('closing socket')
         sock.close()
-
-    # I will need to write a custom c module to break this bottleneck           
-    arr = np.frombuffer(response_bytes, dtype=np.single)    
-    arr = arr.reshape((1920*1080, 4))          
-    return arr 
+        
+    #arr = np.frombuffer(pass_message["additional_data"]["data"], dtype=np.single)    
+    #arr = arr.reshape((1920*1080, 4))          
+    #return arr
+    return pass_message["additional_data"]["data"]
     
 
 class CustomRenderEngine(bpy.types.RenderEngine):
@@ -117,6 +372,7 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     def __init__(self):
         self.scene_data = None
         self.draw_data = None
+        subprocess.Popen(ELEVEN_PATH, shell=True)
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.
@@ -132,14 +388,23 @@ class CustomRenderEngine(bpy.types.RenderEngine):
         self.size_x = int(scene.render.resolution_x * scale)
         self.size_y = int(scene.render.resolution_y * scale)
 
-        sceneTCP("C:\\Users\\Kike\\Desktop\\TFM\\scenes\\blenderTest")
-
-
         result = self.begin_result(0, 0, self.size_x, self.size_y)
         layer = result.layers[0].passes["Combined"]
-        #layer.rect = rect        
+    
+        export_scene(scene, "C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse")
+        
+        bytes = sceneTCP("C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse", self)    
+          
+                       
+        src = np.frombuffer(bytes, dtype=np.single)   
+        src = src.ctypes.data_as(ctypes.c_void_p)
+        render_pass = result.layers[0].passes["Combined"]
+        dst = render_pass.as_pointer() + 96
+        dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
+        ctypes.memmove(dst.contents, src, 1920 * 1080 * 4 * 4)
+        
+                
         self.end_result(result)
-
 
     # For viewport renders, this method gets called once at the start and
     # whenever the scene or 3D viewport changes. This method is where data
@@ -210,11 +475,7 @@ class CustomDrawData:
 
         pixels = width * height * array.array('f', [0.9, 0.2, 0.1, 1.0])
         
-        print(len(pixels))
-        
         pixels = gpu.types.Buffer('FLOAT', width * height * 4)
-
-        print(len(pixels))
 
         # Generate texture
         self.texture = gpu.types.GPUTexture((width, height), format='RGBA16F', data=pixels)

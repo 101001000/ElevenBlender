@@ -66,7 +66,7 @@ def get_render_info_msg():
               
     msg = dict()
     msg["type"] = "command"
-    msg["msg"] = '--get_render_info'
+    msg["msg"] = '--get_info'
     return msg
 
 def write_message(msg, sock):
@@ -147,12 +147,11 @@ def sendHDRI(sock, json_tex):
 
 def sendTexture(sock, json_tex):
         
-    image = json_tex.pop("data")    
+    image = json_tex.pop("data")   
     arr = np.empty((image.size[1] * image.size[0] * 4), dtype=np.single)
     image.pixels.foreach_get(arr)
-    
-    arr = np.delete(arr, np.arange(3, arr.size, 4))
-    byte_data = arr.tobytes()   
+    #arr = np.delete(arr, np.arange(3, arr.size, 4))
+    byte_data = arr.tobytes()  
              
     tex_load_msg = dict()
     tex_load_msg["type"] = "command"
@@ -170,7 +169,7 @@ def sendMaterial(sock, json_mat):
             
     mat_load_msg = dict()
     mat_load_msg["type"] = "command"
-    mat_load_msg["msg"] = "--load_material" 
+    mat_load_msg["msg"] = "--load_brdf_material" 
     mat_load_msg["additional_data"] = dict()
     mat_load_msg["additional_data"]["data_type"] = "json"
     mat_load_msg["additional_data"]["data"] = byte_data 
@@ -258,8 +257,8 @@ def convertMaterial(mat):
 
 def log(str):
     now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    print(current_time, str)
+    current_time = now.strftime("%H:%M:%S.%f")
+    print("[python]", current_time, str)
     
 def sceneTCP(scene_path, render_instance):
 
@@ -276,7 +275,7 @@ def sceneTCP(scene_path, render_instance):
         
         scene_load_msg = dict()
         scene_load_msg["type"] = "command"
-        scene_load_msg["msg"] = "--load_obj " + scene_path      
+        scene_load_msg["msg"] = "--load_object --path=" + scene_path
         
         write_message(scene_load_msg, sock)
         ack_message = read_message(sock) 
@@ -325,8 +324,8 @@ def sceneTCP(scene_path, render_instance):
         time.sleep(5) 
         
         samples = 0
-        
-        while samples < TARGET_SAMPLES:
+                
+        while True:
             print("getting samples...")
             write_message(get_render_info_msg(), sock)
             info_msg = read_message(sock)
@@ -334,9 +333,29 @@ def sceneTCP(scene_path, render_instance):
                 samples = json.loads(info_msg["msg"])["samples"]
                 render_instance.update_progress(samples / TARGET_SAMPLES) 
                 print(samples)
+                
+                get_pass_msg = dict()
+                get_pass_msg["type"] = "command"
+                get_pass_msg["msg"] = "--get_pass beauty" 
+            
+                write_message(get_pass_msg, sock)
+                pass_message = read_message(sock)
+                bytes = pass_message["additional_data"]["data"]
+            
+                result = render_instance.begin_result(0, 0, render_instance.size_x, render_instance.size_y)
+                render_pass = result.layers[0].passes["Combined"]
+            
+                src = np.frombuffer(bytes, dtype=np.single)   
+                src = src.ctypes.data_as(ctypes.c_void_p)
+                dst = render_pass.as_pointer() + 96
+                dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
+                ctypes.memmove(dst.contents, src, 1920 * 1080 * 4 * 4)
+                                
+                render_instance.end_result(result)
+                
             else:
                 break
-            time.sleep(0.5) 
+            time.sleep(0.1) 
             
         
         get_pass_msg = dict()
@@ -353,10 +372,8 @@ def sceneTCP(scene_path, render_instance):
         print('closing socket')
         sock.close()
         
-    #arr = np.frombuffer(pass_message["additional_data"]["data"], dtype=np.single)    
-    #arr = arr.reshape((1920*1080, 4))          
-    #return arr
-    return pass_message["additional_data"]["data"]
+
+    #return pass_message["additional_data"]["data"]
     
 
 class CustomRenderEngine(bpy.types.RenderEngine):
@@ -393,18 +410,17 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     
         export_scene(scene, "C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse")
         
-        bytes = sceneTCP("C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse", self)    
+        sceneTCP("C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse", self)    
           
-                       
+        """               
         src = np.frombuffer(bytes, dtype=np.single)   
         src = src.ctypes.data_as(ctypes.c_void_p)
         render_pass = result.layers[0].passes["Combined"]
         dst = render_pass.as_pointer() + 96
         dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
         ctypes.memmove(dst.contents, src, 1920 * 1080 * 4 * 4)
-        
-                
         self.end_result(result)
+        """
 
     # For viewport renders, this method gets called once at the start and
     # whenever the scene or 3D viewport changes. This method is where data

@@ -20,7 +20,6 @@ ELEVEN_PATH = "C:\\Users\\Kike\\Desktop\\TFM\\repos\\ElevenRender\\ElevenRender.
 TCP_MESSAGE_MAXSIZE = 1024
 TARGET_SAMPLES = 50
 
-
 def export_scene(scene, path):
     
     scene_object = dict()
@@ -57,7 +56,13 @@ def export_scene(scene, path):
     else:        
         b_env_color = bpy.context.scene.world.node_tree.nodes['Background'].inputs[0].default_value
         scene_object['hdri']['color'] = {'r':b_env_color[0], 'g':b_env_color[1], 'b':b_env_color[2]}        
-    
+
+    """
+    for obj in bpy.data.objects:
+        print(obj)
+        obj.matrix_world @ obj.data.vertices[0].co
+    """    
+        
     bpy.ops.export_scene.obj(filepath=path + "\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')
     with open(path + "\\scene.json", 'w') as fs:
             fs.write(json.dumps(scene_object))
@@ -147,10 +152,11 @@ def sendHDRI(sock, json_tex):
 
 def sendTexture(sock, json_tex):
         
-    image = json_tex.pop("data")   
+    image = json_tex.pop("data")  
+            
+
     arr = np.empty((image.size[1] * image.size[0] * 4), dtype=np.single)
     image.pixels.foreach_get(arr)
-    #arr = np.delete(arr, np.arange(3, arr.size, 4))
     byte_data = arr.tobytes()  
              
     tex_load_msg = dict()
@@ -187,7 +193,7 @@ def convertTextureNode(tex_node):
     tex_json["height"] = int(tex_node.image.size[1]) 
     tex_json["data"] = tex_node.image
     tex_json["color_space"] = tex_node.image.colorspace_settings.name
-    
+            
     log("Converted texture")
     
     return tex_json  
@@ -200,6 +206,15 @@ def compatible(mat):
         return False
         
         
+def get_texturename_from_principled_input(principled_input):
+    
+    try:
+        name = principled_input.links[0].from_node.image.name
+        if principled_input.links[0].from_node.image.size[0] == 0 or principled_input.links[0].from_node.image.size[1] == 0:
+            return False
+    except:
+        return False
+    return name
  
 def convertMaterial(mat):
     
@@ -222,37 +237,28 @@ def convertMaterial(mat):
     mat_json["specular"] = p_specular
     mat_json["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
     
-    try:
-        mat_json["albedo_map"] = principled.inputs['Base Color'].links[0].from_node.image.name
-    except:
-        pass 
+    
+    if get_texturename_from_principled_input(principled.inputs['Base Color']) != False:
+        mat_json["albedo_map"] = get_texturename_from_principled_input(principled.inputs['Base Color'])
+    
+    if get_texturename_from_principled_input(principled.inputs['Roughness']) != False:
+        mat_json["roughness_map"] = get_texturename_from_principled_input(principled.inputs['Roughness'])
+    
+    if get_texturename_from_principled_input(principled.inputs['Metallic']) != False:
+        mat_json["metallic_map"] = get_texturename_from_principled_input(principled.inputs['Metallic'])
+    
+    if get_texturename_from_principled_input(principled.inputs['Emission']) != False:
+        mat_json["emission_map"] = get_texturename_from_principled_input(principled.inputs['Emission'])
     
     try:
-        mat_json["roughness_map"] = principled.inputs['Roughness'].links[0].from_node.image.name
+        if get_texturename_from_principled_input(principled.inputs['Normal'].links[0].from_node.inputs['Color']) != False:
+            mat_json["normal_map"] = get_texturename_from_principled_input(principled.inputs['Normal'].links[0].from_node.inputs['Color'])
     except:
         pass
     
-    try:
-        mat_json["metallic_map"] = principled.inputs['Metallic'].links[0].from_node.image.name
-    except:
-        pass
-    
-    try:
-        mat_json["emission_map"] = principled.inputs['Emission'].links[0].from_node.image.name
-    except:
-        pass
-    
-    try:
-        mat_json["normal_map"] = principled.inputs['Normal'].links[0].from_node.inputs['Color'].links[0].from_node.image.name
-    except:
-        pass  
-    
-    try:
-        mat_json["opacity_map"] = principled.inputs['Alpha'].links[0].from_node.image.name
-    except:
-        pass   
-
-    
+    if get_texturename_from_principled_input(principled.inputs['Alpha']) != False:
+        mat_json["opacity_map"] = get_texturename_from_principled_input(principled.inputs['Alpha'])
+        
     return mat_json
 
 def log(str):
@@ -260,7 +266,7 @@ def log(str):
     current_time = now.strftime("%H:%M:%S.%f")
     print("[python]", current_time, str)
     
-def sceneTCP(scene_path, render_instance):
+def sceneTCP(scene, scene_path, render_instance):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -320,8 +326,9 @@ def sceneTCP(scene_path, render_instance):
         render_start_msg["msg"] = "--start"       
         
         write_message(render_start_msg, sock)    
+        ack_mat_message = read_message(sock) 
         
-        time.sleep(5) 
+        time.sleep(0.5) 
         
         samples = 0
                 
@@ -349,13 +356,13 @@ def sceneTCP(scene_path, render_instance):
                 src = src.ctypes.data_as(ctypes.c_void_p)
                 dst = render_pass.as_pointer() + 96
                 dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
-                ctypes.memmove(dst.contents, src, 1920 * 1080 * 4 * 4)
+                ctypes.memmove(dst.contents, src, scene.render.resolution_x * scene.render.resolution_y * 4 * 4)
                                 
                 render_instance.end_result(result)
                 
             else:
                 break
-            time.sleep(0.1) 
+            time.sleep(1) 
             
         
         get_pass_msg = dict()
@@ -410,7 +417,7 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     
         export_scene(scene, "C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse")
         
-        sceneTCP("C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse", self)    
+        sceneTCP(scene,"C:\\Users\\Kike\\Desktop\\TFM\\scenes\\SeaHouse", self)    
           
         """               
         src = np.frombuffer(bytes, dtype=np.single)   
@@ -520,9 +527,7 @@ def get_panels():
 
     panels = []
     for panel in bpy.types.Panel.__subclasses__():
-        if hasattr(panel, 'COMPAT_ENGINES') and 'BLENDER_RENDER' in panel.COMPAT_ENGINES:
-            if panel.__name__ not in exclude_panels:
-                panels.append(panel)
+        panels.append(panel)
 
     return panels
 

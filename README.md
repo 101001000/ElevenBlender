@@ -11,6 +11,8 @@ The Eleven Render project, is currently, in their first development stages.
 - Environment support (HDRI and plain colors)
 
 # Installation
+You can download the [last release]() or download the repo and run the make_addon.bat script (it will just zip the ElevenBlender folder)
+
 
 # Usage
 

@@ -3,6 +3,8 @@ import array
 import gpu
 import subprocess
 import os
+import addon_utils
+
 
 from .rendersocket import RenderSocket
 from .message import Message
@@ -36,9 +38,16 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.update_stats("Eleven Render:", "Starting engine")
             
         try:
-            render_process = subprocess.Popen(os.environ['ELEVEN_PATH'], shell=True)
+            filepath = ""
+            for mod in addon_utils.modules():
+                if mod.bl_info['name'] == "Eleven Render":
+                    filepath = mod.__file__.replace("__init__.py", "bin\\ElevenRender.exe") 
+                else:
+                    pass
+            print("Opening..." + filepath)
+            render_process = subprocess.Popen(filepath, shell=True)
         except:
-            self.report({"ERROR"}, "Eleven executable not found, set the ELEVEN_PATH environment variable and try again")
+            self.report({"ERROR"}, "Eleven executable not found")
             return
     
         scene = depsgraph.scene
@@ -55,6 +64,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         self.update_stats("Eleven Render:", "Connecting")
         
+        
         eleven_socket = RenderSocket(ip)
                 
         # Send config
@@ -68,10 +78,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         config_data_msg = Message.ConfigDataMessage(config)
         send_config_message = Message.SendConfigMessage(mode="tcp")
-        
-        
-        
-        print("TEST")
+
         config_data_msg.print()
         send_config_message.print()
         

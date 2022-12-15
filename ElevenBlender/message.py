@@ -1,4 +1,5 @@
 import json
+import numpy as np
 
 class Message(dict):
 
@@ -7,12 +8,16 @@ class Message(dict):
     def __init__(self):
         self.__dict__ = dict()
         
+    def print(self):
+        print(json.dumps(self))
+        
 class DataMessage(Message):
 
     def __init__(self, data):
         Message.__init__(self)
         self["type"] = "data"
         self["data"] = data
+        
                 
 class Float4Message(DataMessage):
 
@@ -23,10 +28,6 @@ class Float4Message(DataMessage):
     def data_serialized(self):
         return self["data"].tobytes() 
     
-    def TextureDataMessage(image):
-        arr = np.empty((image.size[1] * image.size[0] * 4), dtype=np.single)
-        image.pixels.foreach_get(arr)
-        return Float4Message(arr)
 
 class JsonMessage(DataMessage):
 
@@ -37,16 +38,6 @@ class JsonMessage(DataMessage):
     def data_serialized(self):
         return bytearray(json.dumps(self["data"], indent = 4).encode()) + b'\00'
     
-    def ConfigMessage(config):
-        return JsonMessage(config)
-        
-    def TextureMetadataMessage(image):
-        tex_metadata = dict()
-        tex_metadata["name"] = image.name
-        tex_metadata["width"] = int(image.size[0])
-        tex_metadata["height"] = int(image.size[1]) 
-        tex_metadata["color_space"] = image.colorspace_settings.nam
-        return JsonMessage(tex_metadata)
 
 class CommandMessage(Message):
 
@@ -59,11 +50,58 @@ class CommandMessage(Message):
     def data_serialized(self):
         return self["data"].encode('utf-8') + b'\00'
     
-    def SendHDRIMessage():
-        return CommandMessage("--load_hdri")
+    
+    
+#TODO: Thinking about merging messages
+    
+def LoadHDRIMessage():
+    return CommandMessage("--load_hdri")
+    
+def LoadConfigMessage():
+    return CommandMessage("--load_config")
+    
+def LoadBrdfMaterialMessage():
+    return CommandMessage("--load_brdf_material")
+    
+def LoadTextureMessage():
+    return CommandMessage("--load_texture")  
+    
+def LoadCameraMessage():
+    return CommandMessage("--load_camera")  
+    
+def LoadObjectMessage(path):
+    return CommandMessage('--load_object --path="' + path + '"')  
+  
+def GetInfoMessage():
+    return CommandMessage('--get_info')
+    
+def GetPassMessage(render_pass):
+    return CommandMessage("--get_pass " + render_pass)
+    
+    
         
-    def SendConfigMessage():
-        return CommandMessage("--load_config")
-        
-    def SendTextureMessage():
-        return CommandMessage("--load_texture")
+  
+def StartMessage():
+    return CommandMessage("--start")  
+    
+def ConfigMessage(config):
+    return JsonMessage(config)
+    
+def CameraMessage(camera):
+    return JsonMessage(camera)
+    
+def BrdfMaterialMessage(mat):
+    return JsonMessage(mat)
+    
+def TextureMetadataMessage(image):
+    tex_metadata = dict()
+    tex_metadata["name"] = image.name
+    tex_metadata["width"] = int(image.size[0])
+    tex_metadata["height"] = int(image.size[1]) 
+    tex_metadata["color_space"] = image.colorspace_settings.nam
+    return JsonMessage(tex_metadata)
+    
+def TextureDataMessage(image):
+    arr = np.empty((image.size[1] * image.size[0] * 4), dtype=np.single)
+    image.pixels.foreach_get(arr)
+    return Float4Message(arr)

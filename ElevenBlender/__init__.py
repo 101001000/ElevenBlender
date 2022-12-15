@@ -27,13 +27,25 @@ def get_panels():
         'VIEWLAYER_PT_filter',
         'VIEWLAYER_PT_layer_passes',
     }
+    
+    include_panels = {
+        'EEVEE_MATERIAL_PT_surface',
+        'MATERIAL_PT_custom_props',
+        'MATERIAL_PT_preview',
+        'EEVEE_MATERIAL_PT_context_material',
+        'MATERIAL_PT_viewport',
+    }
 
     panels = []
     for panel in bpy.types.Panel.__subclasses__():
-        if hasattr(panel, 'COMPAT_ENGINES') and 'BLENDER_RENDER' in panel.COMPAT_ENGINES:
-            if panel.__name__ not in exclude_panels:
+        #print(panel)
+        
+        # First add a
+        
+        if hasattr(panel, 'COMPAT_ENGINES') and panel.__name__ not in exclude_panels:
+            if panel.__name__ in include_panels or 'BLENDER_RENDER' in panel.COMPAT_ENGINES:
                 panels.append(panel)
-
+                    
     return panels
 
 

@@ -4,10 +4,13 @@ import gpu
 import subprocess
 import os
 import addon_utils
-
+import math
+import time
+import ctypes
 
 from .rendersocket import RenderSocket
-from .message import Message
+from .message import * 
+
 
 
 class ElevenEngine(bpy.types.RenderEngine):
@@ -15,6 +18,8 @@ class ElevenEngine(bpy.types.RenderEngine):
     bl_idname = "ELEVEN"
     bl_label = "Eleven"
     bl_use_preview = False
+    bl_use_shading_nodes_custom = False
+    bl_use_eevee_viewport = True
     
     render_process = False
 
@@ -41,7 +46,8 @@ class ElevenEngine(bpy.types.RenderEngine):
             filepath = ""
             for mod in addon_utils.modules():
                 if mod.bl_info['name'] == "Eleven Render":
-                    filepath = mod.__file__.replace("__init__.py", "bin\\ElevenRender.exe") 
+                    filepath = mod.__file__.replace("__init__.py", "bin\\ElevenRender.exe")
+                    addon_path = filepath.replace("bin\\ElevenRender.exe", "")
                 else:
                     pass
             print("Opening..." + filepath)
@@ -54,35 +60,49 @@ class ElevenEngine(bpy.types.RenderEngine):
         scale = scene.render.resolution_percentage / 100.0
         self.size_x = int(scene.render.resolution_x * scale)
         self.size_y = int(scene.render.resolution_y * scale)      
-        
-        sample_target = scene.sample_target
-        denoise = scene.denoise
-        x_res = self.size_x
-        y_res = self.size_y
-        max_bounces = scene.max_bounces
-        ip = scene.ip
-        
+                
         self.update_stats("Eleven Render:", "Connecting")
         
+        eleven_socket = RenderSocket(scene.ip)
+                
         
-        eleven_socket = RenderSocket(ip)
+        #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.
+        #Camera setup:
+        b_cam_loc = bpy.data.objects['Camera'].location
+        b_cam_rot = bpy.data.objects['Camera'].rotation_euler 
+
+        camera = dict()
+
+        camera['position'] = {'x':b_cam_loc.x,'y':b_cam_loc.z,'z':b_cam_loc.y}
+        camera['rotation'] = {'x': 90 - b_cam_rot.x / (math.pi/180), 'y':-b_cam_rot.z / (math.pi/180), 'z': -b_cam_rot.y / (math.pi/180)}
+
+        camera['focal_length'] = bpy.data.cameras[0].lens/1000
+        camera['focus_distance'] = bpy.data.cameras[0].dof.focus_distance
+        camera['aperture'] = bpy.data.cameras[0].dof.aperture_fstop
+        camera['bokeh'] = bpy.data.cameras[0].dof.use_dof
+        camera['sensor_width'] = bpy.data.cameras[0].sensor_width / 1000
+        camera['sensor_height'] = bpy.data.cameras[0].sensor_height / 1000
+  
+                
+        eleven_socket.write_message(LoadCameraMessage())
+        eleven_socket.write_message(CameraMessage(camera))         
+        eleven_socket.wait_ok()
+        
                 
         # Send config
         self.update_stats("Eleven Render:", "Sending config")
         
         config = dict()
-        config["sample_target"] = sample_target
-        config["x_res"] = x_res
-        config["y_res"] = y_res
-        config["max_bounces"] = max_bounces
+        config["sample_target"] = scene.sample_target
+        config["x_res"] = self.size_x
+        config["y_res"] = self.size_y
+        config["max_bounces"] = scene.max_bounces
+        config["denoise"] = scene.denoise
         
-        config_data_msg = Message.ConfigDataMessage(config)
-        send_config_message = Message.SendConfigMessage(mode="tcp")
-
-        config_data_msg.print()
-        send_config_message.print()
+        config_data_msg = ConfigMessage(config)
+        load_config_message = LoadConfigMessage()
         
-        eleven_socket.write_message(send_config_message)
+        eleven_socket.write_message(load_config_message)
         eleven_socket.write_message(config_data_msg)
         eleven_socket.wait_ok()
         
@@ -90,14 +110,15 @@ class ElevenEngine(bpy.types.RenderEngine):
         # Send HDRI:
         # TODO: See what the hell happened with the xOffset (?)
         self.update_stats("Eleven Render:", "Sending environment")
+        print("Sending environment")
         
         if bpy.context.scene.world.node_tree.nodes.find('Environment Texture') != -1:
             hdri_tex = bpy.context.scene.world.node_tree.nodes['Environment Texture'].image
-            hdri_metadata_msg = Message.TextureMetadataMessage(hdri_tex)
-            hdri_data_msg = Message.TextureDataMessage(hdri_tex)
-            send_hdri_msg = Message.SendHDRIMessage(mode="tcp")
+            hdri_metadata_msg = TextureMetadataMessage(hdri_tex)
+            hdri_data_msg = TextureDataMessage(hdri_tex)
+            load_hdri_msg = LoadHDRIMessage()
             
-            eleven_socket.write_message(send_hdri_msg)
+            eleven_socket.write_message(load_hdri_msg)
             eleven_socket.write_message(hdri_metadata_msg)
             eleven_socket.write_message(hdri_data_msg)
             eleven_socket.wait_ok()
@@ -107,10 +128,11 @@ class ElevenEngine(bpy.types.RenderEngine):
             pass        
     
         
-        material = set()
+        materials = set()
         textures = set()
         
         self.update_stats("Eleven Render:", "Getting materials")
+        print("Getting materials")
         
         # Get all compatible materials from every object
         for obj in scene.objects:
@@ -128,6 +150,7 @@ class ElevenEngine(bpy.types.RenderEngine):
 
     
         self.update_stats("Eleven Render:", "Extracting textures")
+        print("Extracting textures")
     
         # Get all relevant textures from each material
         for mat in materials:
@@ -140,6 +163,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         
         self.update_stats("Eleven Render:", "Sending textures")
+        print("Sending textures")
         
         # Send each texture to Eleven
         for tex in textures:
@@ -151,41 +175,92 @@ class ElevenEngine(bpy.types.RenderEngine):
             
             self.update_stats("Eleven Render:", "Sending " + str(tex.name))
             
-            metadata_msg = Message.TextureMetadataMessage(tex)
-            data_msg = Message.TextureDataMessage(tex)
-            send_msg = Message.SendTextureCommandMessage(mode="tcp")
+            metadata_msg = TextureMetadataMessage(tex)
+            data_msg = TextureDataMessage(tex)
+            load_msg = LoadTextureCommandMessage()
             
             eleven_socket.write_message(metadata_msg)
             eleven_socket.write_message(data_msg)
-            eleven_socket.write_message(send_msg)
+            eleven_socket.write_message(load_msg)
             
             eleven_socket.wait_ok()
         
         
         self.update_stats("Eleven Render:", "Sending materials")
+        print("Sending materials")
         
         # Send each material to Eleven
         for mat in materials:
-            pass
         
+            bsdf = mat.node_tree.nodes["Principled BSDF"]
+        
+            p_base_color = bsdf.inputs['Base Color'].default_value
+            p_metalness = bsdf.inputs['Metallic'].default_value
+            p_roughness = bsdf.inputs['Roughness'].default_value
+            p_specular = bsdf.inputs['Specular'].default_value
+            p_opacity = bsdf.inputs['Alpha'].default_value
+            p_emission_color = bsdf.inputs['Emission'].default_value
+            p_emission_strength = bsdf.inputs['Emission Strength'].default_value
+            
+            json_mat = dict()
+            json_mat["name"] = mat.name
+            json_mat["albedo"] = {"r":p_base_color[0], "g":p_base_color[1], "b":p_base_color[2]}
+            json_mat["metalness"] = p_metalness
+            json_mat["roughness"] = p_roughness
+            json_mat["specular"] = p_specular
+            json_mat["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
+        
+            eleven_socket.write_message(LoadBrdfMaterialMessage())
+            eleven_socket.write_message(BrdfMaterialMessage(json_mat))
+            eleven_socket.wait_ok()
+        
+        
+        
+        self.update_stats("Eleven Render:", "Exporting .obj")
+        print("Exporting .obj")
+        bpy.ops.export_scene.obj(filepath=addon_path + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')        
+        eleven_socket.write_message(LoadObjectMessage(addon_path + "temp\\scene.obj"))
+        eleven_socket.wait_ok()
+        
+        
+        
+        
+        self.update_stats("Eleven Render:", "Starting rendering")
+        print("Starting rendering")
+        
+        eleven_socket.write_message(StartMessage())
+        eleven_socket.wait_ok()
+        
+        samples = 0
+        
+        time.sleep(5) 
+        
+        print("Gettin samples!")
+        
+        while samples < scene.sample_target:
+            print("Gettin samples")
+            eleven_socket.write_message(GetInfoMessage())
+            info_msg = eleven_socket.read_message()
+            
+            samples = info_msg["data"]["samples"]
+            print(samples, " samples")
+        
+            eleven_socket.write_message(GetPassMessage("beauty"))
+            pass_msg = eleven_socket.read_message()
+        
+            result = self.begin_result(0, 0, self.size_x, self.size_y)
+            render_pass = result.layers[0].passes["Combined"]
+            
+            src = pass_msg["data"].ctypes.data_as(ctypes.c_void_p)
+            dst = render_pass.as_pointer() + 96
+            dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
+            ctypes.memmove(dst.contents, src, scene.render.resolution_x * scene.render.resolution_y * 4 * 4)
+                            
+            self.end_result(result)
+            
+            time.sleep(1) 
 
-        # Fill the render result with a flat color. The framebuffer is
-        # defined as a list of pixels, each pixel itself being a list of
-        # R,G,B,A values.
-        if self.is_preview:
-            color = [0.1, 0.2, 0.1, 1.0]
-        else:
-            color = [0.2, 0.1, 0.1, 1.0]
-
-        pixel_count = self.size_x * self.size_y
-        rect = [color] * pixel_count
-
-        # Here we write the pixel values to the RenderResult
-        result = self.begin_result(0, 0, self.size_x, self.size_y)
-        layer = result.layers[0].passes["Combined"]
-        layer.rect = rect
-        self.end_result(result)
-
+        print("End")
 
 def compatible(mat):
     try:

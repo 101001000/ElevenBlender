@@ -1,6 +1,7 @@
 import socket
 import copy
 import json
+import numpy as np
 
 from .message import Message
 
@@ -33,25 +34,37 @@ class RenderSocket(socket.socket):
         if len(msg_header_bytes) > Message.MESSAGE_HEADER_SIZE:
             raise Exception("Message header size exceded.")
  
+        print("Sending: ")
+        msg.print()
+ 
         self.sendall(msg_header_bytes)           
         self.sendall(msg_data_bytes)
         
     def read_message(self):
         
         msg_header_bytes = self.recv(Message.MESSAGE_HEADER_SIZE)
-        msg_header_str = msg_header_bytes.decode("utf-8")
+        msg_header_str = msg_header_bytes.decode("utf-8").rstrip('\x00')
         msg = json.loads(msg_header_str)
         
         msg["data"] = bytearray()
         bytes_received = 0
                     
-        while amount_received < msg["data_size"]:
-            data = self.recv(MESSAGE_CHUNK_SIZE)
-            amount_received += len(data)
+        while bytes_received < msg["data_size"]:
+            data = self.recv(RenderSocket.MESSAGE_CHUNK_SIZE)
+            bytes_received += len(data)
             msg["data"] += data
+        
+        if msg["data_format"] == "json":
+            msg["data"] = json.loads(msg["data"])
+
+        if msg["data_format"] == "float4":
+            msg["data"] = np.frombuffer(msg["data"], dtype=np.single)   
+        
+        print("LEIDO MENSAJEEE")
+        print(msg)
         
         return msg    
 
     def wait_ok(self):
         msg = self.read_message()
-        return msg["type"] == "status" and msg["data"] == "OK"
+        return msg["type"] == "status" and msg["data"] == "ok"

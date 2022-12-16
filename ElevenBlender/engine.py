@@ -82,7 +82,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         camera['bokeh'] = bpy.data.cameras[0].dof.use_dof
         camera['sensor_width'] = bpy.data.cameras[0].sensor_width / 1000
         camera['sensor_height'] = bpy.data.cameras[0].sensor_height / 1000
-  
+
                 
         eleven_socket.write_message(LoadCameraMessage())
         eleven_socket.write_message(CameraMessage(camera))         
@@ -232,8 +232,6 @@ class ElevenEngine(bpy.types.RenderEngine):
         eleven_socket.wait_ok()
         
         samples = 0
-        
-        time.sleep(5) 
         
         print("Gettin samples!")
         

@@ -173,7 +173,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             self.eleven_socket.wait_ok()
         else:
             #Quick ugly patch for color environment. In the future, Environment will work with shaders.
-            env_color = bpy.context.scene.world.color
+            env_color = bpy.context.scene.world.node_tree.nodes['Background'].inputs[0].default_value
             image = bpy.data.images.new("hdri_color", width=1, height=1)
             image.pixels = [env_color[0], env_color[1], env_color[2], 1]
             self.eleven_socket.write_message(LoadHDRIMessage())
@@ -181,6 +181,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             self.eleven_socket.wait_ok()
             self.eleven_socket.write_message(TextureDataMessage(image))
             self.eleven_socket.wait_ok()
+            bpy.data.images.remove(image)
 
 
     def extract_materials(self):

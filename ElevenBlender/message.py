@@ -55,7 +55,7 @@ class CommandMessage(Message):
 #TODO: Thinking about merging messages
     
 def LoadHDRIMessage():
-    return CommandMessage("--load_hdri")
+    return CommandMessage("--load_hdri --mirror_x --mirror_y")
     
 def LoadConfigMessage():
     return CommandMessage("--load_config")
@@ -98,7 +98,8 @@ def TextureMetadataMessage(image):
     tex_metadata["name"] = image.name
     tex_metadata["width"] = int(image.size[0])
     tex_metadata["height"] = int(image.size[1]) 
-    tex_metadata["color_space"] = image.colorspace_settings.nam
+    tex_metadata["channels"] = int(image.channels) 
+    tex_metadata["color_space"] = image.colorspace_settings.name
     return JsonMessage(tex_metadata)
     
 def TextureDataMessage(image):

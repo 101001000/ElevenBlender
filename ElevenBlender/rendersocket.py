@@ -34,9 +34,6 @@ class RenderSocket(socket.socket):
         if len(msg_header_bytes) > Message.MESSAGE_HEADER_SIZE:
             raise Exception("Message header size exceded.")
  
-        print("Sending: ")
-        msg.print()
- 
         self.sendall(msg_header_bytes)           
         self.sendall(msg_data_bytes)
         

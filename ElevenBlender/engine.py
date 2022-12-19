@@ -259,6 +259,12 @@ class ElevenEngine(bpy.types.RenderEngine):
             p_emission_strength = bsdf.inputs['Emission Strength'].default_value
             
             albedo_map = get_imagename(bsdf, "Base Color")
+            metallic_map = get_imagename(bsdf, "Metallic")
+            roughness_map = get_imagename(bsdf, "Roughness")
+            emssion_map = get_imagename(bsdf, "Emission")
+            opacity_map = get_imagename(bsdf, "Alpha")
+            normal_map = get_imagename(bsdf, "Normal")
+            
             
             json_mat = dict()
             json_mat["name"] = mat.name
@@ -270,6 +276,21 @@ class ElevenEngine(bpy.types.RenderEngine):
                 
             if albedo_map :
                 json_mat["albedo_map"] = albedo_map
+            
+            if metallic_map :
+                json_mat["metallic_map"] = metallic_map
+                
+            if roughness_map :
+                json_mat["roughness_map"] = roughness_map
+                
+            if emssion_map :
+                json_mat["emssion_map"] = emssion_map
+            
+            if opacity_map :
+                json_mat["opacity_map"] = opacity_map
+                
+            if normal_map :
+                json_mat["normal_map"] = normal_map
         
             self.eleven_socket.write_message(LoadBrdfMaterialMessage())
             self.eleven_socket.write_message(BrdfMaterialMessage(json_mat))
@@ -296,7 +317,11 @@ def compatible(mat):
   
 def get_imagename(bsdf, att):
     try:
-        return bsdf.inputs[att].links[0].from_node.image.name
+        tex_node = bsdf.inputs[att].links[0].from_node
+        if tex_node.type =='TEX_IMAGE':
+            return tex_node.image.name
+        if tex_node.type == 'NORMAL_MAP':
+            return tex_node.inputs['Color'].links[0].from_node.image.name
     except:
         return False
   

@@ -69,8 +69,8 @@ def LoadTextureMessage():
 def LoadCameraMessage():
     return CommandMessage("--load_camera")  
     
-def LoadObjectMessage(path):
-    return CommandMessage('--load_object --path="' + path + '"')  
+def LoadObjectMessage(path, mode):
+    return CommandMessage('--load_object --path="' + path + '"' + (" --recompute_normals" if mode == "Face Weighted" else ""))  
   
 def GetInfoMessage():
     return CommandMessage('--get_info')
@@ -83,7 +83,10 @@ def GetPassMessage(render_pass):
   
 def StartMessage():
     return CommandMessage("--start")  
-    
+
+def StopMessage():
+    return CommandMessage("--stop")      
+
 def ConfigMessage(config):
     return JsonMessage(config)
     

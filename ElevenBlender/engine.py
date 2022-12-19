@@ -113,6 +113,8 @@ class ElevenEngine(bpy.types.RenderEngine):
             time.sleep(1) 
 
         print("End")
+        self.eleven_socket.write_message(StopMessage())
+        self.eleven_socket.wait_ok()
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.
@@ -301,7 +303,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.update_stats("Eleven Render:", "Exporting .obj")
         print("Exporting .obj")
         bpy.ops.export_scene.obj(filepath=self.addon_path + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')        
-        self.eleven_socket.write_message(LoadObjectMessage(self.addon_path + "temp\\scene.obj"))
+        self.eleven_socket.write_message(LoadObjectMessage(self.addon_path + "temp\\scene.obj", self.scene.normals))
         self.eleven_socket.wait_ok()
         
 

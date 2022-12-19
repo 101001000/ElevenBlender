@@ -17,6 +17,11 @@ class ElevenPanel(bpy.types.Panel):
                     ("TCP", "TCP", "Send scene data through TCP. Only needed for render instances hosted in other machine"),
                     ("Filesystem", "Filesystem", "Export data and load it through a file. Unperformant, used for compatibility"),
                 ))
+        bpy.types.Scene.normals = bpy.props.EnumProperty(name="Recompute Normals",
+                items=(
+                    ("None", "None", "Use Blender's computed normals"),
+                    ("Face Weighted", "Face Weighted", "Bigger faces impact more on normal direction"),
+                ))
         bpy.types.Scene.max_bounces = bpy.props.IntProperty(name="Max Bounces", default=5)
 
     def draw(self, context):
@@ -25,6 +30,7 @@ class ElevenPanel(bpy.types.Panel):
 
         ip = layout.prop(context.scene, 'ip')
         mode = layout.prop(context.scene, 'mode')
+        normals = layout.prop(context.scene, 'normals')
         row = layout.row()
         
         denoise = layout.prop(context.scene, 'denoise')

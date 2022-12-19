@@ -232,15 +232,14 @@ class ElevenEngine(bpy.types.RenderEngine):
                     self.report({"WARNING"}, "There is more than one texture with the name: " + str(tex.name))
             
             self.update_stats("Eleven Render:", "Sending " + str(tex.name))
-            
-            metadata_msg = TextureMetadataMessage(tex)
-            data_msg = TextureDataMessage(tex)
-            load_msg = LoadTextureCommandMessage()
-            
-            self.eleven_socket.write_message(load_msg)
-            self.eleven_socket.write_message(metadata_msg)
-            self.eleven_socket.write_message(data_msg)
+            print("Sending " + str(tex.name))
+                        
+            self.eleven_socket.write_message(LoadTextureMessage())
+            self.eleven_socket.write_message(TextureMetadataMessage(tex))
             self.eleven_socket.wait_ok()
+            self.eleven_socket.write_message(TextureDataMessage(tex))
+            self.eleven_socket.wait_ok()
+            
 
     def send_materials(self, materials):
         self.update_stats("Eleven Render:", "Sending materials")
@@ -259,6 +258,8 @@ class ElevenEngine(bpy.types.RenderEngine):
             p_emission_color = bsdf.inputs['Emission'].default_value
             p_emission_strength = bsdf.inputs['Emission Strength'].default_value
             
+            albedo_map = get_imagename(bsdf, "Base Color")
+            
             json_mat = dict()
             json_mat["name"] = mat.name
             json_mat["albedo"] = {"r":p_base_color[0], "g":p_base_color[1], "b":p_base_color[2]}
@@ -266,6 +267,9 @@ class ElevenEngine(bpy.types.RenderEngine):
             json_mat["roughness"] = p_roughness
             json_mat["specular"] = p_specular
             json_mat["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
+                
+            if albedo_map :
+                json_mat["albedo_map"] = albedo_map
         
             self.eleven_socket.write_message(LoadBrdfMaterialMessage())
             self.eleven_socket.write_message(BrdfMaterialMessage(json_mat))
@@ -290,6 +294,12 @@ def compatible(mat):
         return False
         
   
+def get_imagename(bsdf, att):
+    try:
+        return bsdf.inputs[att].links[0].from_node.image.name
+    except:
+        return False
+  
 def extract_textures_from_mat(mat):
     
     bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
@@ -300,7 +310,7 @@ def extract_textures_from_mat(mat):
         if input.links:
             tex_node = input.links[0].from_node
             if tex_node.type =='TEX_IMAGE':
-                texs.append(tex_node)
+                texs.append(tex_node.image)
             if tex_node.type == 'NORMAL_MAP':
                 try:
                     texs.append(tex_node.inputs['Color'].links[0].from_node.image)

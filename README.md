@@ -8,7 +8,6 @@ The Eleven Render project, is currently, in their first development stages.
 
 # Features
 - Disney Principled BRDF material support (without transmission) (only textures)
-- WIP: Blender shading nodes thanks to 
 - Environment support (HDRI and plain colors)
 
 # Installation

@@ -65,9 +65,9 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.size_y = int(self.scene.render.resolution_y * scale)      
                 
         self.update_stats("Eleven Render:", "Connecting")
+        print("Connecting to", self.scene.ip)
         self.eleven_socket = RenderSocket(self.scene.ip)
-              
-        
+            
         self.send_camera()
         self.send_config()
         self.send_hdri()
@@ -131,9 +131,24 @@ class ElevenEngine(bpy.types.RenderEngine):
         camera['focus_distance'] = bpy.data.cameras[0].dof.focus_distance
         camera['aperture'] = bpy.data.cameras[0].dof.aperture_fstop
         camera['bokeh'] = bpy.data.cameras[0].dof.use_dof
-        camera['sensor_width'] = bpy.data.cameras[0].sensor_width / 1000
-        camera['sensor_height'] = bpy.data.cameras[0].sensor_height / 1000
-                
+        
+        aspect_ratio = float(self.size_x) / float(self.size_y)
+        sensor_aspect_ration = float(bpy.data.cameras[0].sensor_width) / float(bpy.data.cameras[0].sensor_height)
+        
+        sf = bpy.data.cameras[0].sensor_fit
+           
+        if sf == 'AUTO' :
+            sf = 'HORIZONTAL' if sensor_aspect_ration < aspect_ratio else 'VERTICAL'
+            
+        if sf == 'HORIZONTAL':
+            camera['sensor_width'] = bpy.data.cameras[0].sensor_width / 1000
+            camera['sensor_height'] = camera['sensor_width'] / aspect_ratio
+            
+        if sf == 'VERTICAL' :
+            camera['sensor_height'] = bpy.data.cameras[0].sensor_height / 1000
+            camera['sensor_width'] = camera['sensor_height'] / aspect_ratio
+            
+        
         self.eleven_socket.write_message(LoadCameraMessage())
         self.eleven_socket.write_message(CameraMessage(camera))         
         self.eleven_socket.wait_ok()
@@ -170,7 +185,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             
             self.eleven_socket.write_message(load_hdri_msg)
             self.eleven_socket.write_message(hdri_metadata_msg)
-            self.eleven_socket.wait_ok()
+            #self.eleven_socket.wait_ok()
             self.eleven_socket.write_message(hdri_data_msg)
             self.eleven_socket.wait_ok()
         else:
@@ -180,7 +195,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             image.pixels = [env_color[0], env_color[1], env_color[2], 1]
             self.eleven_socket.write_message(LoadHDRIMessage())
             self.eleven_socket.write_message(TextureMetadataMessage(image))
-            self.eleven_socket.wait_ok()
+            #self.eleven_socket.wait_ok()
             self.eleven_socket.write_message(TextureDataMessage(image))
             self.eleven_socket.wait_ok()
             bpy.data.images.remove(image)

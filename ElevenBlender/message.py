@@ -55,7 +55,7 @@ class CommandMessage(Message):
 #TODO: Thinking about merging messages
     
 def LoadHDRIMessage():
-    return CommandMessage("--load_hdri --mirror_x --mirror_y")
+    return CommandMessage("--load_hdri --mirror_y")
     
 def LoadConfigMessage():
     return CommandMessage("--load_config")

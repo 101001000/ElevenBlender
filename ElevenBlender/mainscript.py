@@ -397,6 +397,7 @@ class CustomRenderEngine(bpy.types.RenderEngine):
         self.scene_data = None
         self.draw_data = None
         subprocess.Popen(ELEVEN_PATH, shell=True)
+        print('Opened', ELEVEN_PATH)
 
     # When the render engine instance is destroy, this is called. Clean up any
     # render engine data here, for example stopping running render threads.

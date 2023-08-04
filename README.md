@@ -23,7 +23,7 @@ You can download the [last release]() or download the repo and run the make_addo
 - [ ] Fast scene export without .obj exporter
 
 ### Full shading nodes support
-- [ ] Blender Node Tree -> OSL converter
+- [ ] Blender Node Tree -> OSL converter [shadergraph2osl](https://github.com/101001000/shadergraph2osl)
 - [ ] ASL Formal Specification
 - [ ] OSL -> ASL syntax converter
 

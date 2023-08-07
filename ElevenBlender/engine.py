@@ -138,16 +138,26 @@ class ElevenEngine(bpy.types.RenderEngine):
         sf = bpy.data.cameras[0].sensor_fit
            
         if sf == 'AUTO' :
-            sf = 'HORIZONTAL' if sensor_aspect_ration < aspect_ratio else 'VERTICAL'
+            sensor_size = bpy.data.cameras[0].sensor_width
             
         if sf == 'HORIZONTAL':
-            camera['sensor_width'] = bpy.data.cameras[0].sensor_width / 1000
-            camera['sensor_height'] = camera['sensor_width'] / aspect_ratio
+            sensor_size = bpy.data.cameras[0].sensor_width
             
         if sf == 'VERTICAL' :
-            camera['sensor_height'] = bpy.data.cameras[0].sensor_height / 1000
-            camera['sensor_width'] = camera['sensor_height'] / aspect_ratio
+            sensor_size = bpy.data.cameras[0].sensor_height
+
+         
+        if sf == 'AUTO' :
+            sf = 'HORIZONTAL' if bpy.data.cameras[0].sensor_width < bpy.data.cameras[0].sensor_height else 'VERTICAL'
             
+        if sf == 'HORIZONTAL':
+            camera['sensor_width'] = sensor_size / 1000
+            camera['sensor_height'] =camera['sensor_width'] / aspect_ratio
+            
+        if sf == 'VERTICAL' :
+            camera['sensor_height'] = sensor_size / 1000
+            camera['sensor_width'] =camera['sensor_height'] * aspect_ratio
+         
         
         self.eleven_socket.write_message(LoadCameraMessage())
         self.eleven_socket.write_message(CameraMessage(camera))         
@@ -253,7 +263,7 @@ class ElevenEngine(bpy.types.RenderEngine):
                         
             self.eleven_socket.write_message(LoadTextureMessage())
             self.eleven_socket.write_message(TextureMetadataMessage(tex))
-            self.eleven_socket.wait_ok()
+            #self.eleven_socket.wait_ok()
             self.eleven_socket.write_message(TextureDataMessage(tex))
             self.eleven_socket.wait_ok()
             

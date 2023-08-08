@@ -10,11 +10,13 @@ class RenderSocket(socket.socket):
     MESSAGE_CHUNK_SIZE = 8192
 
     def __init__(self, address):
-            super().__init__(socket.AF_INET, socket.SOCK_STREAM)
-            str_tuple = tuple(filter(None, address.split(':')))
-            self.address = (str_tuple[0], int(str_tuple[1]))
-            self.connect(self.address)
+        super().__init__(socket.AF_INET, socket.SOCK_STREAM)
+        str_tuple = tuple(filter(None, address.split(':')))
+        self.address = (str_tuple[0], int(str_tuple[1]))
+        self.connect(self.address)
     
+    def disconnect(self):
+        self.close()
     
     def write_message(self, msg):
         

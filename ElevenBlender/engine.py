@@ -223,10 +223,10 @@ class ElevenEngine(bpy.types.RenderEngine):
             if obj.type == "MESH":
                 if len(obj.material_slots) > 1:
                     self.report({"WARNING"}, str(obj.name) + " has more than one material. Only the first material slot will be used")
-            
+                    materials.add(obj.material_slots[0].material)
                 elif len(obj.material_slots) == 0:
                     self.report({"WARNING"}, str(obj.name) + " has no materials")
-                
+                    
                 elif not compatible(obj.material_slots[0].material):
                     self.report({"WARNING"}, str(obj.material_slots[0].material.name) + " is not compatible with Eleven")
                 else:

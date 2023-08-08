@@ -114,6 +114,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             time.sleep(1) 
 
         print("End")
+        self.eleven_socket.disconnect()
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.
@@ -147,7 +148,8 @@ class ElevenEngine(bpy.types.RenderEngine):
 
          
         if sf == 'AUTO' :
-            sf = 'HORIZONTAL' if bpy.data.cameras[0].sensor_width < bpy.data.cameras[0].sensor_height else 'VERTICAL'
+            sf = 'HORIZONTAL' if self.size_x >= self.size_y else 'VERTICAL'
+            #sf = 'HORIZONTAL' if bpy.data.cameras[0].sensor_width < bpy.data.cameras[0].sensor_height else 'VERTICAL'
             
         if sf == 'HORIZONTAL':
             camera['sensor_width'] = sensor_size / 1000

@@ -55,7 +55,7 @@ class ElevenEngine(bpy.types.RenderEngine):
                 else:
                     pass
             print("Opening..." + filepath )
-            render_process = subprocess.Popen(filepath, shell=True)
+            self.render_process = subprocess.Popen(filepath, shell=True)
         except:
             self.report({"ERROR"}, "Eleven executable not found")
             return
@@ -115,6 +115,7 @@ class ElevenEngine(bpy.types.RenderEngine):
 
         print("End")
         self.eleven_socket.disconnect()
+        subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=self.render_process.pid))
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.

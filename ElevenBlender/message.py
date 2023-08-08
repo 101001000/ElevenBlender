@@ -84,8 +84,8 @@ def GetPassMessage(render_pass):
 def StartMessage():
     return CommandMessage("--start")  
 
-def StopMessage():
-    return CommandMessage("--stop")      
+def AbortMessage():
+    return CommandMessage("--abort")      
 
 def ConfigMessage(config):
     return JsonMessage(config)

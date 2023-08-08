@@ -114,8 +114,6 @@ class ElevenEngine(bpy.types.RenderEngine):
             time.sleep(1) 
 
         print("End")
-        self.eleven_socket.write_message(StopMessage())
-        self.eleven_socket.wait_ok()
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.

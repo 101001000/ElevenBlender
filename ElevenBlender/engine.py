@@ -7,6 +7,7 @@ import addon_utils
 import math
 import time
 import ctypes
+import mmap
 
 from .rendersocket import RenderSocket
 from .message import * 
@@ -53,7 +54,7 @@ class ElevenEngine(bpy.types.RenderEngine):
                     self.addon_path = filepath.replace("bin\\ElevenRender.exe", "")
                 else:
                     pass
-            print("Opening..." + filepath)
+            print("Opening..." + filepath )
             render_process = subprocess.Popen(filepath, shell=True)
         except:
             self.report({"ERROR"}, "Eleven executable not found")
@@ -246,6 +247,19 @@ class ElevenEngine(bpy.types.RenderEngine):
                 textures.add(tex)
         return textures
 
+    def send_texture_sm(self, texture):
+        self.eleven_socket.write_message(LoadTextureMessage())
+        self.eleven_socket.write_message(TextureMetadataMessage(texture))
+        
+        with open("shm", mode="a+", encoding="utf-8") as file_obj:
+            file_obj.seek(0)
+            with mmap.mmap(file_obj.fileno(), length= texture.size[0] * texture.size[1] * texture.channels * 4, access=mmap.ACCESS_COPY) as mmap_obj:
+                msg = TextureDataMessage(texture)                    
+                msg_data_bytes = msg.data_serialized() 
+                mmap_obj.write(msg_data_bytes)
+                    
+        self.eleven_socket.wait_ok()
+
     def send_textures(self, textures):
         self.update_stats("Eleven Render:", "Sending textures")
         print("Sending textures")
@@ -262,8 +276,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             print("Sending " + str(tex.name))
                         
             self.eleven_socket.write_message(LoadTextureMessage())
-            self.eleven_socket.write_message(TextureMetadataMessage(tex))
-            #self.eleven_socket.wait_ok()
+            self.eleven_socket.write_message(TextureMetadataMessage(tex))      
             self.eleven_socket.write_message(TextureDataMessage(tex))
             self.eleven_socket.wait_ok()
             

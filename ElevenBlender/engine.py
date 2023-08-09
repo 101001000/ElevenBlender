@@ -96,6 +96,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             info_msg = self.eleven_socket.read_message()
             
             samples = info_msg["data"]["samples"]
+            self.update_progress(samples / self.scene.sample_target) 
             print(samples, " samples")
         
             self.eleven_socket.write_message(GetPassMessage("beauty"))

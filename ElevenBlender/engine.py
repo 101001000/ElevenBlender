@@ -69,6 +69,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         print("Connecting to", self.scene.ip)
         self.eleven_socket = RenderSocket(self.scene.ip)
             
+        self.eleven_socket.wait_ok()
+            
         self.send_camera()
         self.send_config()
         self.send_hdri()

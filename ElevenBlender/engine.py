@@ -39,7 +39,12 @@ class ConnectOperator(bpy.types.Operator):
         global eleven_socket
         eleven_socket = RenderSocket(context.scene.ip)
         eleven_socket.wait_ok()
-            
+        
+        eleven_socket.write_message(GetSyclInfoMessage())
+        info_msg = eleven_socket.read_message()
+        
+        print(info_msg)
+
         #except:
         #    self.report({'ERROR'}, "Error opening " + filepath)
         #    pass

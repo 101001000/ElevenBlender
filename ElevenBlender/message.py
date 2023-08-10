@@ -85,6 +85,10 @@ def LoadObjectMessageTCP(mode):
   
 def GetInfoMessage():
     return CommandMessage('--get_info')
+
+def GetSyclInfoMessage():
+    return CommandMessage('--get_sycl_info')
+    
     
 def GetPassMessage(render_pass):
     return CommandMessage("--get_pass " + render_pass)

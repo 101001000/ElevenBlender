@@ -23,9 +23,7 @@ class ElevenEngine(bpy.types.RenderEngine):
     bl_use_eevee_viewport = True
     
     render_process = False
-    eleven_socket = None
-    scene = None
-    addon_path = None
+    addon_path = None   
 
     # Init is called whenever a new render engine instance is created. Multiple
     # instances may exist at the same time, for example for a viewport and final
@@ -55,7 +53,7 @@ class ElevenEngine(bpy.types.RenderEngine):
                 else:
                     pass
             print("Opening..." + filepath )
-            self.render_process = subprocess.Popen(filepath, shell=True)
+            render_process = subprocess.Popen(filepath, shell=True)
         except:
             self.report({"ERROR"}, "Eleven executable not found")
             return
@@ -68,7 +66,6 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.update_stats("Eleven Render:", "Connecting")
         print("Connecting to", self.scene.ip)
         self.eleven_socket = RenderSocket(self.scene.ip)
-            
         self.eleven_socket.wait_ok()
             
         self.send_camera()
@@ -118,7 +115,7 @@ class ElevenEngine(bpy.types.RenderEngine):
 
         print("End")
         self.eleven_socket.disconnect()
-        subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=self.render_process.pid))
+        subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=render_process.pid))
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.

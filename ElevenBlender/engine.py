@@ -214,7 +214,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         config["y_res"] = self.size_y
         config["max_bounces"] = self.scene.max_bounces
         config["denoise"] = self.scene.denoise
-        config["device"] = self.scene.device[0]
+        config["device"] = self.scene.device
         
         config_data_msg = ConfigMessage(config)
         load_config_message = LoadConfigMessage()

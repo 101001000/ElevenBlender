@@ -23,6 +23,7 @@ class ElevenPanel(bpy.types.Panel):
                     ("Face Weighted", "Face Weighted", "Bigger faces impact more on normal direction"),
                 ))
         bpy.types.Scene.max_bounces = bpy.props.IntProperty(name="Max Bounces", default=5)
+        bpy.types.Scene.connection_status = bpy.props.StringProperty(name="Connection Status", default="disconnected")
 
     def draw(self, context):
         
@@ -36,5 +37,16 @@ class ElevenPanel(bpy.types.Panel):
         denoise = layout.prop(context.scene, 'denoise')
         sample_target = layout.prop(context.scene, 'sample_target')
         max_bounces = layout.prop(context.scene, 'max_bounces')
+        
+        if context.scene.connection_status == "disconnected" :
+            connect_op = layout.operator("eleven.connect_operator", text="Connect", icon="CONSOLE")
+        else:
+            connect_op = layout.operator("eleven.disconnect_operator", text="Disconnect", icon="CONSOLE")
+        
+        
+        
+        layout.label(text=f"Connection Status: {context.scene.connection_status}")
+        
+        #connection_status= layout.prop(context.scene, 'connection_status')
         
         

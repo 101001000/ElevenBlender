@@ -2,7 +2,8 @@ import bpy
 
 
 from .panel import ElevenPanel
-from .engine import ElevenEngine
+from .engine import ElevenEngine, ConnectOperator, DisconnectOperator
+
 
 
 
@@ -37,11 +38,7 @@ def get_panels():
     }
 
     panels = []
-    for panel in bpy.types.Panel.__subclasses__():
-        #print(panel)
-        
-        # First add a
-        
+    for panel in bpy.types.Panel.__subclasses__():       
         if hasattr(panel, 'COMPAT_ENGINES') and panel.__name__ not in exclude_panels:
             if panel.__name__ in include_panels or 'BLENDER_RENDER' in panel.COMPAT_ENGINES:
                 panels.append(panel)
@@ -50,6 +47,8 @@ def get_panels():
 
 
 def register():
+    bpy.utils.register_class(DisconnectOperator)
+    bpy.utils.register_class(ConnectOperator)
     bpy.utils.register_class(ElevenEngine)
 
     for panel in get_panels():
@@ -59,6 +58,9 @@ def register():
 
 
 def unregister():
+
+    bpy.ops.eleven.disconnect_operator()
+
     bpy.utils.unregister_class(ElevenEngine)
 
     for panel in get_panels():
@@ -66,6 +68,8 @@ def unregister():
             panel.COMPAT_ENGINES.remove('ELEVEN')
             
     bpy.utils.unregister_class(ElevenPanel)
+    bpy.utils.unregister_class(ConnectOperator)
+    bpy.utils.unregister_class(DisconnectOperator)
     
     cleanse_modules()
     

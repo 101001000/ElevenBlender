@@ -11,7 +11,7 @@ import subprocess
 
 from .rendersocket import RenderSocket
 from .message import * 
-
+from .panel import ElevenPanel
 
 def get_eleven_bin_path():
     for mod in addon_utils.modules():
@@ -42,13 +42,12 @@ class ConnectOperator(bpy.types.Operator):
         
         eleven_socket.write_message(GetSyclInfoMessage())
         info_msg = eleven_socket.read_message()
+                
+        ElevenPanel.devices = []
         
-        print(info_msg)
+        for device in info_msg["data"]["devices"] :
+            ElevenPanel.devices.append(((device["name"]),device["name"],device["name"]))
 
-        #except:
-        #    self.report({'ERROR'}, "Error opening " + filepath)
-        #    pass
-        
         context.scene.connection_status = "connected"
 
         return {'FINISHED'}
@@ -58,11 +57,14 @@ class DisconnectOperator(bpy.types.Operator):
     bl_idname = "eleven.disconnect_operator"
     bl_label = "Disconnect Operator"
 
-    def execute(self, context):     
-        eleven_socket.disconnect()
-        subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=render_process.pid))
-        self.report({'INFO'}, "Disconnected succesfully ")
-        context.scene.connection_status = "disconnected"
+    def execute(self, context):
+        try:
+            eleven_socket.disconnect()
+            subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=render_process.pid))
+            self.report({'INFO'}, "Disconnected succesfully ")
+            context.scene.connection_status = "disconnected"
+        except:
+            pass
         return {'FINISHED'}
 
 
@@ -212,6 +214,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         config["y_res"] = self.size_y
         config["max_bounces"] = self.scene.max_bounces
         config["denoise"] = self.scene.denoise
+        config["device"] = self.scene.device[0]
         
         config_data_msg = ConfigMessage(config)
         load_config_message = LoadConfigMessage()

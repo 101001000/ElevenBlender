@@ -1,5 +1,5 @@
 import bpy
-
+import os
 
 from .panel import ElevenPanel
 from .engine import ElevenEngine, ConnectOperator, DisconnectOperator
@@ -47,6 +47,9 @@ def get_panels():
 
 
 def register():
+
+    os.system('cls') 
+
     bpy.utils.register_class(DisconnectOperator)
     bpy.utils.register_class(ConnectOperator)
     bpy.utils.register_class(ElevenEngine)

@@ -18,6 +18,14 @@ class DataMessage(Message):
         self["type"] = "data"
         self["data"] = data
         
+class BytesMessage(DataMessage):
+
+    def __init__(self, data):
+        DataMessage.__init__(self, data)
+        self["data_format"] = "bytes"
+        
+    def data_serialized(self):
+        return self["data"]     
                 
 class Float4Message(DataMessage):
 
@@ -27,7 +35,7 @@ class Float4Message(DataMessage):
         
     def data_serialized(self):
         return self["data"].tobytes() 
-    
+  
 
 class JsonMessage(DataMessage):
 
@@ -69,8 +77,11 @@ def LoadTextureMessage():
 def LoadCameraMessage():
     return CommandMessage("--load_camera")  
     
-def LoadObjectMessage(path, mode):
-    return CommandMessage('--load_object --path="' + path + '"' + (" --recompute_normals" if mode == "Face Weighted" else ""))  
+def LoadObjectMessage(path, normals):
+    return CommandMessage('--load_object --path="' + path + '"' + (" --recompute_normals" if normals == "Face Weighted" else ""))  
+  
+def LoadObjectMessageTCP(mode):
+    return CommandMessage('--load_object ' + (" --recompute_normals" if mode == "Face Weighted" else ""))  
   
 def GetInfoMessage():
     return CommandMessage('--get_info')
@@ -95,7 +106,10 @@ def CameraMessage(camera):
     
 def BrdfMaterialMessage(mat):
     return JsonMessage(mat)
-    
+   
+def ObjDataMessage(obj):
+    return BytesMessage(obj)
+   
 def TextureMetadataMessage(image):
     tex_metadata = dict()
     tex_metadata["name"] = image.name

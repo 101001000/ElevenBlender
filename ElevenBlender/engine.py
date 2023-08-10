@@ -90,7 +90,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         samples = 0
         
-        print("Gettin samples!")
+        print("Getting samples!")
         
         while samples < self.scene.sample_target:
             print("Gettin samples")
@@ -167,7 +167,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.eleven_socket.write_message(LoadCameraMessage())
         self.eleven_socket.write_message(CameraMessage(camera))         
         self.eleven_socket.wait_ok()
-        
+       
+    
     def send_config(self):
         # Send config
         self.update_stats("Eleven Render:", "Sending config")
@@ -301,6 +302,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             p_opacity = bsdf.inputs['Alpha'].default_value
             p_emission_color = bsdf.inputs['Emission'].default_value
             p_emission_strength = bsdf.inputs['Emission Strength'].default_value
+            p_transmission = bsdf.inputs['Transmission'].default_value
             
             albedo_map = get_imagename(bsdf, "Base Color")
             metallic_map = get_imagename(bsdf, "Metallic")
@@ -308,6 +310,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             emssion_map = get_imagename(bsdf, "Emission")
             opacity_map = get_imagename(bsdf, "Alpha")
             normal_map = get_imagename(bsdf, "Normal")
+            transmission_map = get_imagename(bsdf, "Transmission")
             
             
             json_mat = dict()
@@ -315,6 +318,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             json_mat["albedo"] = {"r":p_base_color[0], "g":p_base_color[1], "b":p_base_color[2]}
             json_mat["metalness"] = p_metalness
             json_mat["roughness"] = p_roughness
+            json_mat["transmission"] = p_transmission
             json_mat["specular"] = p_specular
             json_mat["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
                 
@@ -335,6 +339,9 @@ class ElevenEngine(bpy.types.RenderEngine):
                 
             if normal_map :
                 json_mat["normal_map"] = normal_map
+                
+            if transmission_map :
+                json_mat["transmission_map"] = transmission_map
         
             self.eleven_socket.write_message(LoadBrdfMaterialMessage())
             self.eleven_socket.write_message(BrdfMaterialMessage(json_mat))
@@ -344,10 +351,22 @@ class ElevenEngine(bpy.types.RenderEngine):
     def send_objects(self):
         self.update_stats("Eleven Render:", "Exporting .obj")
         print("Exporting .obj")
-        bpy.ops.export_scene.obj(filepath=self.addon_path + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')        
-        self.eleven_socket.write_message(LoadObjectMessage(self.addon_path + "temp\\scene.obj", self.scene.normals))
+        bpy.ops.export_scene.obj(filepath=self.addon_path + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')      
+
+        with open(self.addon_path + "temp\\scene.obj", 'rb') as f:
+            obj_data = f.read()
+        with open(self.addon_path + "temp\\scene.mtl", 'rb') as f:
+            mtl_data = f.read()
+        
+        print("self.scene.normals:", self.scene.normals)
+        
+        self.eleven_socket.write_message(LoadObjectMessageTCP(self.scene.normals))
+        self.eleven_socket.write_message(ObjDataMessage(obj_data))
+        self.eleven_socket.write_message(ObjDataMessage(mtl_data))
         self.eleven_socket.wait_ok()
         
+        os.remove(self.addon_path + "temp\\scene.obj")
+        os.remove(self.addon_path + "temp\\scene.mtl")
 
     
 
@@ -387,3 +406,4 @@ def extract_textures_from_mat(mat):
                     pass
     
     return texs
+  

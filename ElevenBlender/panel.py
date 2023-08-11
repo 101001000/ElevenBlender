@@ -16,6 +16,7 @@ class ElevenPanel(bpy.types.Panel):
     def __init__(self):
         bpy.types.Scene.denoise = bpy.props.BoolProperty(name="Denoise (Open AI Denoise)")
         bpy.types.Scene.sample_target = bpy.props.IntProperty(name="Sample Target", default=100)
+        bpy.types.Scene.block_size = bpy.props.IntProperty(name="Block Size", default=8)
         bpy.types.Scene.ip = bpy.props.StringProperty(name="Ip", default="127.0.0.1:5557")
         bpy.types.Scene.normals = bpy.props.EnumProperty(name="Recompute Normals",
                 items=(
@@ -38,6 +39,7 @@ class ElevenPanel(bpy.types.Panel):
 
         ip = layout.prop(context.scene, 'ip')
         mode = layout.prop(context.scene, 'mode')
+        block_size = layout.prop(context.scene, 'block_size')
         normals = layout.prop(context.scene, 'normals')
         device = layout.prop(context.scene, 'device')
 

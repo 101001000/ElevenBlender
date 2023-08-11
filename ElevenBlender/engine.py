@@ -130,6 +130,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         print("Getting samples!")
         
+        time.sleep(0.1)
+        
         while samples < self.scene.sample_target:
             print("Gettin samples")
             eleven_socket.write_message(GetInfoMessage())
@@ -215,6 +217,9 @@ class ElevenEngine(bpy.types.RenderEngine):
         config["max_bounces"] = self.scene.max_bounces
         config["denoise"] = self.scene.denoise
         config["device"] = self.scene.device
+        config["block_size"] = self.scene.block_size
+        
+        print(config)
         
         config_data_msg = ConfigMessage(config)
         load_config_message = LoadConfigMessage()

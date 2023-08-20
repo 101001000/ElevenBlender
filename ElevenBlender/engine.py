@@ -21,13 +21,57 @@ def get_eleven_bin_path():
 def get_eleven_addon_path():
     return get_eleven_bin_path().replace("bin\\ElevenRender.exe", "")
 
+def scene_update_handler(dummy):
+    bpy.context.scene.my_update_flag = True
+
+def quick_pass_move(origin, pass_dest, width, height):
+    src = origin.ctypes.data_as(ctypes.c_void_p)
+    dst = pass_dest.as_pointer() + 96
+    dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
+    ctypes.memmove(dst.contents, src, width * height * 4 * 4)
+
+bpy.types.Scene.my_update_flag = bpy.props.BoolProperty(default=False)
+bpy.app.handlers.render_init.append(scene_update_handler)
+
+class SCENE_OT_watch_changes(bpy.types.Operator):
+    bl_idname = "scene.watch_changes"
+    bl_label = "Watch for Changes"
+
+    def modal(self, context, event):
+        if bpy.context.scene.my_update_flag and bpy.context.scene.render.engine == "ELEVEN":
+            # Way faster but broken in 3.4 because some line jumps.
+            
+            print("exporting")
+            
+            if bpy.app.version >= (4, 0, 0):
+                print("Using fast")
+                bpy.ops.wm.obj_export(filepath=get_eleven_addon_path() + "temp\\scene.obj", path_mode='ABSOLUTE', export_triangulated_mesh=True)
+            else:
+                print("Using slow")
+                bpy.ops.export_scene.obj(filepath=get_eleven_addon_path() + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')
+                print("Finished")
+                
+            bpy.context.scene.my_update_flag = False
+
+            
+        return {'PASS_THROUGH'}
+
+    def execute(self, context):
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def cancel(self, context):
+        bpy.app.handlers.render_init.remove(scene_update_handler)
+
 class ConnectOperator(bpy.types.Operator):
 
     bl_idname = "eleven.connect_operator"
     bl_label = "Connect Operator"
 
     def execute(self, context):     
-        #try:
+
+        global connect_context
+        connect_context = context
 
         filepath = get_eleven_bin_path()
 
@@ -98,11 +142,22 @@ class ElevenEngine(bpy.types.RenderEngine):
         #    eleven_socket.disconnect()
         #    subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=render_process.pid))
         ElevenEngine.instance_count = ElevenEngine.instance_count - 1
+ 
+    def update_render_passes(self, scene=None, renderlayer=None):
+        self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
+        self.register_pass(scene, renderlayer, "Normal", 4, "RGBA", 'COLOR')
 
-        
     # This is the method called by Blender for both final renders (F12) and
     # small preview for materials, world and lights.
     def render(self, depsgraph):
+         
+        #while (bpy.context.scene.my_update_flag):
+        #    print("waiting")
+        #    time.sleep(1)
+
+        while(bpy.context.scene.my_update_flag):
+            time.sleep(1)
+            print("waited")
           
         self.scene = depsgraph.scene
         scale = self.scene.render.resolution_percentage / 100.0
@@ -142,18 +197,26 @@ class ElevenEngine(bpy.types.RenderEngine):
             print(samples, " samples")
         
             eleven_socket.write_message(GetPassMessage("beauty"))
-            pass_msg = eleven_socket.read_message()
+            beauty_msg = eleven_socket.read_message()
+            
+            eleven_socket.write_message(GetPassMessage("normal"))
+            normal_msg = eleven_socket.read_message()
         
             result = self.begin_result(0, 0, self.size_x, self.size_y)
-            render_pass = result.layers[0].passes["Combined"]
             
-            src = pass_msg["data"].ctypes.data_as(ctypes.c_void_p)
-            dst = render_pass.as_pointer() + 96
-            dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
-            ctypes.memmove(dst.contents, src, self.scene.render.resolution_x * self.scene.render.resolution_y * 4 * 4)
-                            
+            beauty_pass = result.layers[0].passes["Combined"]
+            normal_pass = result.layers[0].passes["Normal"]
+            
+            # https://github.com/blender/blender/blob/main/source/blender/render/RE_pipeline.h
+            # RenderPass is now handled differently.
+            if bpy.app.version < (4, 0, 0) :
+                quick_pass_move(beauty_msg["data"], beauty_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
+                quick_pass_move(normal_msg["data"], normal_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
+            else:
+                beauty_pass.rect = beauty_msg["data"].reshape(-1, 4).tolist()
+                beauty_pass.rect = normal_msg["data"].reshape(-1, 4).tolist()
+                      
             self.end_result(result)
-            
             time.sleep(1) 
 
 
@@ -271,7 +334,8 @@ class ElevenEngine(bpy.types.RenderEngine):
                     materials.add(obj.material_slots[0].material)
                 elif len(obj.material_slots) == 0:
                     self.report({"WARNING"}, str(obj.name) + " has no materials")
-                    
+                elif obj.material_slots[0].material == None:
+                    self.report({"WARNING"}, "Material without name is not compatible with Eleven")                 
                 elif not compatible(obj.material_slots[0].material):
                     self.report({"WARNING"}, str(obj.material_slots[0].material.name) + " is not compatible with Eleven")
                 else:
@@ -320,12 +384,28 @@ class ElevenEngine(bpy.types.RenderEngine):
             
             self.update_stats("Eleven Render:", "Sending " + str(tex.name))
             print("Sending " + str(tex.name))
-                        
+                       
+            old_width  = tex.size[0]
+            old_height = tex.size[1]
+              
+            ds = int(self.scene.tex_downscale)
+              
+            if ds > 0 and tex.has_data and (old_width > ds or old_height > ds)  :
+                scale = ds / max(old_width, old_height)
+                tex.scale(int(old_width * scale), int(old_height * scale))
+
             eleven_socket.write_message(LoadTextureMessage())
             eleven_socket.write_message(TextureMetadataMessage(tex))      
             eleven_socket.write_message(TextureDataMessage(tex))
             eleven_socket.wait_ok()
+                        
+            if ds > 0 and tex.has_data and (old_width > ds or old_height > ds)  :
+                try:
+                    tex.reload()
+                except:
+                    print("error reloading")
             
+             
 
     def send_materials(self, materials):
         self.update_stats("Eleven Render:", "Sending materials")
@@ -387,27 +467,24 @@ class ElevenEngine(bpy.types.RenderEngine):
             eleven_socket.write_message(LoadBrdfMaterialMessage())
             eleven_socket.write_message(BrdfMaterialMessage(json_mat))
             eleven_socket.wait_ok()
-        
-
+    
     def send_objects(self):
         self.update_stats("Eleven Render:", "Exporting .obj")
         print("Exporting .obj")
-        bpy.ops.export_scene.obj(filepath=ElevenEngine.addon_path + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')      
-
-        with open(ElevenEngine.addon_path + "temp\\scene.obj", 'rb') as f:
+                    
+        with open(get_eleven_addon_path() + "temp\\scene.obj", 'rb') as f:
             obj_data = f.read()
-        with open(ElevenEngine.addon_path + "temp\\scene.mtl", 'rb') as f:
+        with open(get_eleven_addon_path() + "temp\\scene.mtl", 'r') as f:
             mtl_data = f.read()
-        
-        print("self.scene.normals:", self.scene.normals)
         
         eleven_socket.write_message(LoadObjectMessageTCP(self.scene.normals))
         eleven_socket.write_message(ObjDataMessage(obj_data))
-        eleven_socket.write_message(ObjDataMessage(mtl_data))
+        #eleven_socket.write_message(ObjDataMessage(bytes(trim_wavefront_mtls(mtl_data.replace("/", "\\")), 'utf-8') + b'\00'))
+        eleven_socket.write_message(ObjDataMessage(bytes(mtl_data.replace("/", "\\"), 'utf-8') + b'\00'))
         eleven_socket.wait_ok()
         
-        os.remove(ElevenEngine.addon_path + "temp\\scene.obj")
-        os.remove(ElevenEngine.addon_path + "temp\\scene.mtl")
+        os.remove(get_eleven_addon_path() + "temp\\scene.obj")
+        os.remove(get_eleven_addon_path() + "temp\\scene.mtl")
 
     
 
@@ -448,3 +525,12 @@ def extract_textures_from_mat(mat):
     
     return texs
   
+def trim_wavefront_mtls(istr):
+    str = ""
+    
+    for line in istr.splitlines():
+        print("parsing line ", line)
+        if "newmtl" in line :
+            print("Line appended")
+            str = str + line + "\n"
+    return str

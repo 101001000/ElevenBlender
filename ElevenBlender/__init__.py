@@ -2,7 +2,7 @@ import bpy
 import os
 
 from .panel import ElevenPanel
-from .engine import ElevenEngine, ConnectOperator, DisconnectOperator
+from .engine import ElevenEngine, ConnectOperator, DisconnectOperator, SCENE_OT_watch_changes
 
 
 
@@ -50,6 +50,7 @@ def register():
 
     os.system('cls') 
 
+    bpy.utils.register_class(SCENE_OT_watch_changes)
     bpy.utils.register_class(DisconnectOperator)
     bpy.utils.register_class(ConnectOperator)
     bpy.utils.register_class(ElevenEngine)
@@ -73,6 +74,7 @@ def unregister():
     bpy.utils.unregister_class(ElevenPanel)
     bpy.utils.unregister_class(ConnectOperator)
     bpy.utils.unregister_class(DisconnectOperator)
+    bpy.utils.unregister_class(SCENE_OT_watch_changes)
     
     cleanse_modules()
     

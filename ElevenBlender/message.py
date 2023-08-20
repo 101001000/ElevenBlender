@@ -25,7 +25,7 @@ class BytesMessage(DataMessage):
         self["data_format"] = "bytes"
         
     def data_serialized(self):
-        return self["data"]     
+        return self["data"]  
                 
 class Float4Message(DataMessage):
 
@@ -46,7 +46,6 @@ class JsonMessage(DataMessage):
     def data_serialized(self):
         return bytearray(json.dumps(self["data"], indent = 4).encode()) + b'\00'
     
-
 class CommandMessage(Message):
 
     def __init__(self, command):
@@ -120,7 +119,7 @@ def TextureMetadataMessage(image):
     tex_metadata["width"] = int(image.size[0])
     tex_metadata["height"] = int(image.size[1]) 
     tex_metadata["channels"] = int(image.channels)
-    if image.colorspace_settings.name == "Linear" :
+    if image.colorspace_settings.name == "Linear" or image.colorspace_settings.name == "Linear Rec.709":
         tex_metadata["color_space"] = "LINEAR"
     if image.colorspace_settings.name == "sRGB" :
         tex_metadata["color_space"] = "sRGB"

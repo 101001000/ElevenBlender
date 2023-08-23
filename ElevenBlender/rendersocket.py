@@ -47,21 +47,24 @@ class RenderSocket(socket.socket):
         
         msg["data"] = bytearray()
         bytes_received = 0
+
+        
                     
         while bytes_received < msg["data_size"]:
             data = self.recv(RenderSocket.MESSAGE_CHUNK_SIZE)
             bytes_received += len(data)
             msg["data"] += data
         
+                            
+        print("LEIDO MENSAJEEE")
+
         if msg["data_format"] == "json":
             msg["data"] = json.loads(msg["data"])
 
         if msg["data_format"] == "float4":
             msg["data"] = np.frombuffer(msg["data"], dtype=np.single)   
         
-        print("LEIDO MENSAJEEE")
-        print(msg)
-        
+
         return msg    
 
     def wait_ok(self):

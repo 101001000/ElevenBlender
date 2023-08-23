@@ -30,7 +30,7 @@ def quick_pass_move(origin, pass_dest, width, height):
     dst = ctypes.cast(dst, ctypes.POINTER(ctypes.c_void_p))
     ctypes.memmove(dst.contents, src, width * height * 4 * 4)
 
-bpy.types.Scene.my_update_flag = bpy.props.BoolProperty(default=False)
+bpy.types.Scene.my_update_flag = bpy.props.BoolProperty(default=True)
 bpy.app.handlers.render_init.append(scene_update_handler)
 
 class SCENE_OT_watch_changes(bpy.types.Operator):
@@ -106,9 +106,10 @@ class DisconnectOperator(bpy.types.Operator):
             eleven_socket.disconnect()
             subprocess.Popen("TASKKILL /F /PID {pid} /T".format(pid=render_process.pid))
             self.report({'INFO'}, "Disconnected succesfully ")
-            context.scene.connection_status = "disconnected"
         except:
             pass
+        bpy.context.scene.my_update_flag = True
+        context.scene.connection_status = "disconnected"
         return {'FINISHED'}
 
 
@@ -442,7 +443,7 @@ class ElevenEngine(bpy.types.RenderEngine):
             json_mat["transmission"] = p_transmission
             json_mat["specular"] = p_specular
             json_mat["emission"] = {"r":p_emission_color[0] * p_emission_strength, "g":p_emission_color[1] * p_emission_strength, "b":p_emission_color[2] * p_emission_strength}
-                
+               
             if albedo_map :
                 json_mat["albedo_map"] = albedo_map
             

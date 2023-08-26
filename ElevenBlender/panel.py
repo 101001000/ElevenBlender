@@ -23,12 +23,6 @@ class ElevenPanel(bpy.types.Panel):
                     ("None", "None", "Use Blender's computed normals"),
                     ("Face Weighted", "Face Weighted", "Bigger faces impact more on normal direction"),
                 ))
-        bpy.types.Scene.mode = bpy.props.EnumProperty(name="Mode",
-                items=(
-                    ("Shared Memory", "Shared Memory", "Fastest. Use it if the render instance is in the same machine as Blender"),
-                    ("TCP", "TCP", "Send scene data through TCP. Only needed for render instances hosted in other machine"),
-                    ("Filesystem", "Filesystem", "Export data and load it through a file. Unperformant, used for compatibility"),
-                ))
         bpy.types.Scene.tex_downscale = bpy.props.EnumProperty(name="Texture downsampling",
                 items=(
                     ("0", "None", "Use default resolution"),
@@ -50,7 +44,6 @@ class ElevenPanel(bpy.types.Panel):
         layout = self.layout
 
         ip = layout.prop(context.scene, 'ip')
-        mode = layout.prop(context.scene, 'mode')
         block_size = layout.prop(context.scene, 'block_size')
         normals = layout.prop(context.scene, 'normals')
         device = layout.prop(context.scene, 'device')

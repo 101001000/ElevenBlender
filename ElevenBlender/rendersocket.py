@@ -55,9 +55,6 @@ class RenderSocket(socket.socket):
             bytes_received += len(data)
             msg["data"] += data
         
-                            
-        print("LEIDO MENSAJEEE")
-
         if msg["data_format"] == "json":
             msg["data"] = json.loads(msg["data"])
 

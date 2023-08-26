@@ -63,6 +63,21 @@ class SCENE_OT_watch_changes(bpy.types.Operator):
     def cancel(self, context):
         bpy.app.handlers.render_init.remove(scene_update_handler)
 
+class ShaderSelectorNode(bpy.types.Node):
+    bl_idname = 'ShaderSelectorNode'
+    bl_label = 'Eleven Shader Selector node'
+
+    value: bpy.props.IntProperty(
+        name="Shader ID",
+        default=-1,
+        description="Shader ID value")
+
+    def init(self, context):
+        self.outputs.new('NodeSocketColor', 'Output')
+        
+    def draw_buttons(self, context, layout):
+        layout.prop(self, 'value')
+
 class ConnectOperator(bpy.types.Operator):
 
     bl_idname = "eleven.connect_operator"
@@ -82,6 +97,7 @@ class ConnectOperator(bpy.types.Operator):
         print("Connecting to", context.scene.ip)
         global eleven_socket
         eleven_socket = RenderSocket(context.scene.ip)
+        time.sleep(1)
         eleven_socket.wait_ok()
         
         eleven_socket.write_message(GetSyclInfoMessage())
@@ -108,6 +124,7 @@ class DisconnectOperator(bpy.types.Operator):
             self.report({'INFO'}, "Disconnected succesfully ")
         except:
             pass
+           
         bpy.context.scene.my_update_flag = True
         context.scene.connection_status = "disconnected"
         return {'FINISHED'}
@@ -185,8 +202,6 @@ class ElevenEngine(bpy.types.RenderEngine):
         samples = 0
         
         print("Getting samples!")
-        
-        time.sleep(0.1)
         
         while samples < self.scene.sample_target:
             print("Gettin samples")
@@ -429,13 +444,22 @@ class ElevenEngine(bpy.types.RenderEngine):
             albedo_map = get_imagename(bsdf, "Base Color")
             metallic_map = get_imagename(bsdf, "Metallic")
             roughness_map = get_imagename(bsdf, "Roughness")
-            emssion_map = get_imagename(bsdf, "Emission")
+            emission_map = get_imagename(bsdf, "Emission")
             opacity_map = get_imagename(bsdf, "Alpha")
             normal_map = get_imagename(bsdf, "Normal")
             transmission_map = get_imagename(bsdf, "Transmission")
             
-            
+                        
             json_mat = dict()
+            
+            json_mat["albedo_shader_id"] = get_shaderid(bsdf, "Base Color")
+            json_mat["metallic_shader_id"] = get_shaderid(bsdf, "Metallic")
+            json_mat["roughness_shader_id"] = get_shaderid(bsdf, "Roughness")
+            json_mat["emission_shader_id"] = get_shaderid(bsdf, "Emission")
+            json_mat["alpha_shader_id"] = get_shaderid(bsdf, "Alpha")
+            json_mat["normal_shader_id"] = get_shaderid(bsdf, "Normal")
+            json_mat["transmission_shader_id"] = get_shaderid(bsdf, "Transmission")
+
             json_mat["name"] = mat.name
             json_mat["albedo"] = {"r":p_base_color[0], "g":p_base_color[1], "b":p_base_color[2]}
             json_mat["metalness"] = p_metalness
@@ -453,8 +477,8 @@ class ElevenEngine(bpy.types.RenderEngine):
             if roughness_map :
                 json_mat["roughness_map"] = roughness_map
                 
-            if emssion_map :
-                json_mat["emssion_map"] = emssion_map
+            if emission_map :
+                json_mat["emission_map"] = emission_map
             
             if opacity_map :
                 json_mat["opacity_map"] = opacity_map
@@ -506,6 +530,14 @@ def get_imagename(bsdf, att):
             return tex_node.inputs['Color'].links[0].from_node.image.name
     except:
         return False
+        
+def get_shaderid(bsdf, att):
+    try:
+        shader_id_node = bsdf.inputs[att].links[0].from_node
+        if shader_id_node.bl_idname =='ShaderSelectorNode':
+            return shader_id_node.value
+    except:
+        return -1
   
 def extract_textures_from_mat(mat):
     

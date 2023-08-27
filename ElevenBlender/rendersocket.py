@@ -1,6 +1,7 @@
 import socket
 import copy
 import json
+import time
 import numpy as np
 
 from .message import Message
@@ -41,26 +42,27 @@ class RenderSocket(socket.socket):
         
     def read_message(self):
         
-        msg_header_bytes = self.recv(Message.MESSAGE_HEADER_SIZE)
+        msg_header_bytes = self.recv(Message.MESSAGE_HEADER_SIZE)       
         msg_header_str = msg_header_bytes.decode("utf-8").rstrip('\x00')
         msg = json.loads(msg_header_str)
-        
+                
         msg["data"] = bytearray()
         bytes_received = 0
-
-        
                     
         while bytes_received < msg["data_size"]:
             data = self.recv(RenderSocket.MESSAGE_CHUNK_SIZE)
             bytes_received += len(data)
             msg["data"] += data
         
+
         if msg["data_format"] == "json":
             msg["data"] = json.loads(msg["data"])
 
         if msg["data_format"] == "float4":
-            msg["data"] = np.frombuffer(msg["data"], dtype=np.single)   
-        
+            msg["data"] = np.frombuffer(msg["data"], dtype=np.single) 
+
+        if msg["data_format"] == "string":
+            msg["data"] = msg["data"].decode()          
 
         return msg    
 

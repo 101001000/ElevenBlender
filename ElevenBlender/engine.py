@@ -43,7 +43,7 @@ class SCENE_OT_watch_changes(bpy.types.Operator):
             
             print("exporting")
             
-            if bpy.app.version >= (4, 0, 0):
+            if bpy.app.version <= (4, 0, 0):
                 print("Using fast")
                 bpy.ops.wm.obj_export(filepath=get_eleven_addon_path() + "temp\\scene.obj", path_mode='ABSOLUTE', export_triangulated_mesh=True)
             else:
@@ -97,7 +97,6 @@ class ConnectOperator(bpy.types.Operator):
         print("Connecting to", context.scene.ip)
         global eleven_socket
         eleven_socket = RenderSocket(context.scene.ip)
-        time.sleep(1)
         eleven_socket.wait_ok()
         
         eleven_socket.write_message(GetSyclInfoMessage())
@@ -105,11 +104,15 @@ class ConnectOperator(bpy.types.Operator):
                 
         ElevenPanel.devices = []
         
+        
         for device in info_msg["data"]["devices"] :
-            ElevenPanel.devices.append(((device["name"]),device["name"],device["name"]))
+            print(device["is_compatible"])
+            if device["is_compatible"]:   
+                ElevenPanel.devices.append(((device["name"]),device["name"],device["name"]))
+            else:
+                self.report({'WARNING'}, "Found an incompatible device: " + device["name"])
 
         context.scene.connection_status = "connected"
-
         return {'FINISHED'}
 
 class DisconnectOperator(bpy.types.Operator):
@@ -169,13 +172,8 @@ class ElevenEngine(bpy.types.RenderEngine):
     # small preview for materials, world and lights.
     def render(self, depsgraph):
          
-        #while (bpy.context.scene.my_update_flag):
-        #    print("waiting")
-        #    time.sleep(1)
-
         while(bpy.context.scene.my_update_flag):
-            time.sleep(1)
-            print("waited")
+            time.sleep(0.5)
           
         self.scene = depsgraph.scene
         scale = self.scene.render.resolution_percentage / 100.0
@@ -346,8 +344,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         for obj in self.scene.objects:
             if obj.type == "MESH":
                 if len(obj.material_slots) > 1:
-                    self.report({"WARNING"}, str(obj.name) + " has more than one material. Only the first material slot will be used")
-                    materials.add(obj.material_slots[0].material)
+                    for material_slot in obj.material_slots:
+                        materials.add(material_slot.material)
                 elif len(obj.material_slots) == 0:
                     self.report({"WARNING"}, str(obj.name) + " has no materials")
                 elif obj.material_slots[0].material == None:
@@ -508,8 +506,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         eleven_socket.write_message(ObjDataMessage(bytes(mtl_data.replace("/", "\\"), 'utf-8') + b'\00'))
         eleven_socket.wait_ok()
         
-        os.remove(get_eleven_addon_path() + "temp\\scene.obj")
-        os.remove(get_eleven_addon_path() + "temp\\scene.mtl")
+        #os.remove(get_eleven_addon_path() + "temp\\scene.obj")
+        #os.remove(get_eleven_addon_path() + "temp\\scene.mtl")
 
     
 
@@ -538,6 +536,7 @@ def get_shaderid(bsdf, att):
             return shader_id_node.value
     except:
         return -1
+    return -1
   
 def extract_textures_from_mat(mat):
     

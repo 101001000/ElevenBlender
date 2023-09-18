@@ -305,6 +305,9 @@ class ElevenEngine(bpy.types.RenderEngine):
         config["denoise"] = self.scene.denoise
         config["device"] = self.scene.device
         config["block_size"] = self.scene.block_size
+        config["frame"] = int(self.scene.frame_float)
+        config["fps"] = int(self.scene.render.fps)
+        
         
         print(config)
         

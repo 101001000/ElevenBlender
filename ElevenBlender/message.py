@@ -119,7 +119,7 @@ def TextureMetadataMessage(image):
     tex_metadata["width"] = int(image.size[0])
     tex_metadata["height"] = int(image.size[1]) 
     tex_metadata["channels"] = int(image.channels)
-    if image.colorspace_settings.name == "Linear" or image.colorspace_settings.name == "Linear Rec.709":
+    if image.colorspace_settings.name == "Linear" or image.colorspace_settings.name == "Linear Rec.709" or image.colorspace_settings.name == "Non-Color":
         tex_metadata["color_space"] = "LINEAR"
     if image.colorspace_settings.name == "sRGB" :
         tex_metadata["color_space"] = "sRGB"

@@ -2,7 +2,7 @@ import bpy
 import os
 
 from .panel import ElevenPanel
-from .engine import ElevenEngine, ConnectOperator, DisconnectOperator, SCENE_OT_watch_changes, ShaderSelectorNode
+from .engine import ElevenEngine, ConnectOperator, DisconnectOperator, RunInstanceOperator, SCENE_OT_watch_changes, ShaderSelectorNode
 
 
 
@@ -53,6 +53,7 @@ def register():
     bpy.utils.register_class(SCENE_OT_watch_changes)
     bpy.utils.register_class(DisconnectOperator)
     bpy.utils.register_class(ConnectOperator)
+    bpy.utils.register_class(RunInstanceOperator)
     bpy.utils.register_class(ElevenEngine)
     bpy.utils.register_class(ShaderSelectorNode)
 
@@ -74,6 +75,7 @@ def unregister():
             
     bpy.utils.unregister_class(ShaderSelectorNode)
     bpy.utils.unregister_class(ElevenPanel)
+    bpy.utils.unregister_class(RunInstanceOperator)
     bpy.utils.unregister_class(ConnectOperator)
     bpy.utils.unregister_class(DisconnectOperator)
     bpy.utils.unregister_class(SCENE_OT_watch_changes)

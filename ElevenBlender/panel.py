@@ -59,8 +59,9 @@ class ElevenPanel(bpy.types.Panel):
             connect_op = layout.operator("eleven.connect_operator", text="Connect", icon="CONSOLE")
         else:
             connect_op = layout.operator("eleven.disconnect_operator", text="Disconnect", icon="CONSOLE")
-        
-        
+            
+                  
+        run_instance_op = layout.operator("eleven.run_instance_operator", text="Run Local instance", icon="CONSOLE")
         
         layout.label(text=f"Connection Status: {context.scene.connection_status}")
         

@@ -42,14 +42,7 @@ class SCENE_OT_watch_changes(bpy.types.Operator):
             # Way faster but broken in 3.4 because some line jumps.
             
             print("exporting")
-            
-            if bpy.app.version <= (4, 0, 0):
-                print("Using fast")
-                bpy.ops.wm.obj_export(filepath=get_eleven_addon_path() + "temp\\scene.obj", path_mode='ABSOLUTE', export_triangulated_mesh=True)
-            else:
-                print("Using slow")
-                bpy.ops.export_scene.obj(filepath=get_eleven_addon_path() + "temp\\scene.obj", use_triangles=True, path_mode='ABSOLUTE')
-                print("Finished")
+            bpy.ops.wm.obj_export(filepath=get_eleven_addon_path() + "temp\\scene.obj", path_mode='ABSOLUTE', export_triangulated_mesh=True)
                 
             bpy.context.scene.my_update_flag = False
 
@@ -78,6 +71,18 @@ class ShaderSelectorNode(bpy.types.Node):
     def draw_buttons(self, context, layout):
         layout.prop(self, 'value')
 
+class RunInstanceOperator(bpy.types.Operator):
+
+    bl_idname = "eleven.run_instance_operator"
+    bl_label = "Run Instance Operator"
+
+    def execute(self, context):     
+        filepath = get_eleven_bin_path()
+        global render_process
+        render_process = subprocess.Popen(filepath, shell=True)
+        self.report({'INFO'}, "Opened " + filepath)
+        return {'FINISHED'}
+
 class ConnectOperator(bpy.types.Operator):
 
     bl_idname = "eleven.connect_operator"
@@ -88,12 +93,6 @@ class ConnectOperator(bpy.types.Operator):
         global connect_context
         connect_context = context
 
-        filepath = get_eleven_bin_path()
-
-        global render_process
-        render_process = subprocess.Popen(filepath, shell=True)
-        self.report({'INFO'}, "Opened " + filepath)
-        
         print("Connecting to", context.scene.ip)
         global eleven_socket
         eleven_socket = RenderSocket(context.scene.ip)
@@ -104,13 +103,14 @@ class ConnectOperator(bpy.types.Operator):
                 
         ElevenPanel.devices = []
         
+        print(info_msg)
         
         for device in info_msg["data"]["devices"] :
-            print(device["is_compatible"])
+            device_str = device["name"] + "|" + device["platform"]
             if device["is_compatible"]:   
-                ElevenPanel.devices.append(((device["name"]),device["name"],device["name"]))
+                ElevenPanel.devices.append((device_str,device_str,device_str))
             else:
-                self.report({'WARNING'}, "Found an incompatible device: " + device["name"])
+                self.report({'WARNING'}, "Found an incompatible device: " + device_str)
 
         context.scene.connection_status = "connected"
         return {'FINISHED'}
@@ -168,6 +168,29 @@ class ElevenEngine(bpy.types.RenderEngine):
         self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
         self.register_pass(scene, renderlayer, "Normal", 4, "RGBA", 'COLOR')
 
+    def update_passes_result(self):
+        eleven_socket.write_message(GetPassMessage("beauty"))
+        beauty_msg = eleven_socket.read_message()
+        
+        eleven_socket.write_message(GetPassMessage("normal"))
+        normal_msg = eleven_socket.read_message()
+        
+        result = self.begin_result(0, 0, self.size_x, self.size_y)
+        
+        beauty_pass = result.layers[0].passes["Combined"]
+        normal_pass = result.layers[0].passes["Normal"]
+        
+        # https://github.com/blender/blender/blob/main/source/blender/render/RE_pipeline.h
+        # RenderPass is now handled differently.
+        if bpy.app.version < (4, 0, 0) :
+            quick_pass_move(beauty_msg["data"], beauty_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
+            quick_pass_move(normal_msg["data"], normal_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
+        else:
+            beauty_pass.rect = beauty_msg["data"].reshape(-1, 4).tolist()
+            beauty_pass.rect = normal_msg["data"].reshape(-1, 4).tolist()
+                  
+        self.end_result(result)
+
     # This is the method called by Blender for both final renders (F12) and
     # small preview for materials, world and lights.
     def render(self, depsgraph):
@@ -199,6 +222,8 @@ class ElevenEngine(bpy.types.RenderEngine):
         
         samples = 0
         
+        time.sleep(1)
+        
         print("Getting samples!")
         
         while samples < self.scene.sample_target:
@@ -210,29 +235,14 @@ class ElevenEngine(bpy.types.RenderEngine):
             self.update_progress(samples / self.scene.sample_target) 
             print(samples, " samples")
         
-            eleven_socket.write_message(GetPassMessage("beauty"))
-            beauty_msg = eleven_socket.read_message()
+            self.update_passes_result()
             
-            eleven_socket.write_message(GetPassMessage("normal"))
-            normal_msg = eleven_socket.read_message()
-        
-            result = self.begin_result(0, 0, self.size_x, self.size_y)
-            
-            beauty_pass = result.layers[0].passes["Combined"]
-            normal_pass = result.layers[0].passes["Normal"]
-            
-            # https://github.com/blender/blender/blob/main/source/blender/render/RE_pipeline.h
-            # RenderPass is now handled differently.
-            if bpy.app.version < (4, 0, 0) :
-                quick_pass_move(beauty_msg["data"], beauty_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
-                quick_pass_move(normal_msg["data"], normal_pass, self.scene.render.resolution_x, self.scene.render.resolution_y)
-            else:
-                beauty_pass.rect = beauty_msg["data"].reshape(-1, 4).tolist()
-                beauty_pass.rect = normal_msg["data"].reshape(-1, 4).tolist()
-                      
-            self.end_result(result)
             time.sleep(1) 
 
+        self.update_passes_result()
+
+
+    
 
     def send_camera(self):
         #TODO: Blender uses two different types for handling cameras. Object and Camera. For the moment I don't know how to relationate both.
@@ -343,17 +353,18 @@ class ElevenEngine(bpy.types.RenderEngine):
         # Get all compatible materials from every object
         for obj in self.scene.objects:
             if obj.type == "MESH":
-                if len(obj.material_slots) > 1:
-                    for material_slot in obj.material_slots:
-                        materials.add(material_slot.material)
-                elif len(obj.material_slots) == 0:
+
+                if len(obj.material_slots) == 0:
                     self.report({"WARNING"}, str(obj.name) + " has no materials")
-                elif obj.material_slots[0].material == None:
-                    self.report({"WARNING"}, "Material without name is not compatible with Eleven")                 
-                elif not compatible(obj.material_slots[0].material):
-                    self.report({"WARNING"}, str(obj.material_slots[0].material.name) + " is not compatible with Eleven")
-                else:
-                    materials.add(obj.material_slots[0].material)
+            
+                for material_slot in obj.material_slots:
+                    if material_slot.material == None:
+                        self.report({"WARNING"}, "Material not found")                 
+                    elif not compatible(material_slot.material):
+                        self.report({"WARNING"}, str(material_slot.material.name) + " is not compatible with Eleven")
+                    else:
+                        materials.add(material_slot.material)
+
         return materials
 
     def extract_textures(self, materials):
@@ -428,7 +439,7 @@ class ElevenEngine(bpy.types.RenderEngine):
         # Send each material to Eleven
         for mat in materials:
         
-            bsdf = mat.node_tree.nodes["Principled BSDF"]
+            bsdf = mat.node_tree.nodes['Material Output'].inputs['Surface'].links[0].from_node
         
             p_base_color = bsdf.inputs['Base Color'].default_value
             p_metalness = bsdf.inputs['Metallic'].default_value
@@ -494,7 +505,17 @@ class ElevenEngine(bpy.types.RenderEngine):
     def send_objects(self):
         self.update_stats("Eleven Render:", "Exporting .obj")
         print("Exporting .obj")
-                    
+                        
+        with open(get_eleven_addon_path() + "temp\\scene.obj", 'r') as f:
+            lines = f.readlines()
+
+        # Filter out the unwanted lines
+        lines = [line for line in lines if not (line.startswith("usemtl") and line.strip().split()[-1] == "usemtl")]
+
+        # Write the processed lines back to the file
+        with open(get_eleven_addon_path() + "temp\\scene.obj", 'w') as f:
+            f.writelines(lines)
+                
         with open(get_eleven_addon_path() + "temp\\scene.obj", 'rb') as f:
             obj_data = f.read()
         with open(get_eleven_addon_path() + "temp\\scene.mtl", 'r') as f:
@@ -513,8 +534,10 @@ class ElevenEngine(bpy.types.RenderEngine):
 
 def compatible(mat):
     try:
-        next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-        return True
+        if mat.node_tree.nodes['Material Output'].inputs['Surface'].links[0].from_node.type == 'BSDF_PRINCIPLED':
+            return True
+        else:
+            return False
     except:
         return False
         
@@ -539,8 +562,8 @@ def get_shaderid(bsdf, att):
     return -1
   
 def extract_textures_from_mat(mat):
-    
-    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+        
+    bsdf = mat.node_tree.nodes['Material Output'].inputs['Surface'].links[0].from_node
     
     texs = []
     
